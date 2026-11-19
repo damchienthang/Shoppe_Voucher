@@ -424,7 +424,7 @@ export function formatShopeeError(errCode, customMsg = '') {
   }
 
   const trimmed = String(customMsg || '').trim();
-  const isGenericMessage = !trimmed || /^(not eligible(?: condition)?|error|failed|unknown error|system error)$/i.test(trimmed);
+  const isGenericMessage = !trimmed || /^(ok|success|succeeded|not eligible(?: condition)?|error|failed|unknown error|system error)$/i.test(trimmed);
 
   // 1. Prefer Shopee's own human-readable message if present and not a generic placeholder.
   if (trimmed && !isGenericMessage) {
@@ -469,3 +469,177 @@ export function formatShopeeError(errCode, customMsg = '') {
       return 'Rất tiếc! Voucher này không hợp lệ hoặc không còn hiệu lực.';
   }
 }
+
+/**
+ * Classifies a DOM feedback string captured from Shopee's voucher page.
+ * Evaluates failure / already-saved patterns BEFORE positive success patterns so
+ * negated strings ("Lưu không thành công", "Bạn đã nhận hết lượt") are never
+ * misclassified as success.
+ *
+ * @param {string} rawText
+ * @returns {{ status: 'success' | 'already_saved' | 'failed', errorCode: number, message: string } | null}
+ */
+export function classifyDomToast(rawText) {
+  const text = String(rawText || '').replace(/\s+/g, ' ').trim();
+  if (!text || text.length < 4 || text.length > 260) return null;
+
+  const lower = text.toLowerCase();
+
+  if (
+    /(đã lưu|đã nhận|đã có|đã thu thập).*(trong ví|vào ví rồi|trước đó|rồi)/i.test(lower) ||
+    /bạn đã lưu mã/i.test(lower) ||
+    /already\s+(saved|claimed|collected)/i.test(lower)
+  ) {
+    return { status: 'already_saved', errorCode: 3, message: text };
+  }
+
+  if (
+    /hết lượt|hết mã|đã hết|lưu hết|nhận hết|hết ngân sách|fully\s+claimed|fully\s+redeemed|out\s+of\s+stock/i.test(lower)
+  ) {
+    return { status: 'failed', errorCode: 2, message: text };
+  }
+
+  if (
+    /chưa đến giờ|chưa đến khung giờ|chưa bắt đầu|not\s+started|coming\s+soon/i.test(lower)
+  ) {
+    return { status: 'failed', errorCode: 7, message: text };
+  }
+
+  if (/hết hạn|expired/i.test(lower)) {
+    return { status: 'failed', errorCode: 5, message: text };
+  }
+
+  if (
+    /không hợp lệ|không tồn tại|nhập sai|sai mã|invalid|not\s+found|does\s+not\s+exist/i.test(lower)
+  ) {
+    return { status: 'failed', errorCode: 1, message: text };
+  }
+
+  if (
+    /không đủ điều kiện|không áp dụng|rất tiếc|không thành công|không thể lưu|không thể áp dụng|thất bại|giới hạn|quá tải|lỗi|not\s+eligible|failed|error|sorry|unable/i.test(lower)
+  ) {
+    return { status: 'failed', errorCode: 4, message: text };
+  }
+
+  if (
+    /(lưu|nhận|thu thập).*(thành công|vào ví)/i.test(lower) ||
+    /^đã lưu(\s+vào ví)?[!.]*$/i.test(lower) ||
+    /saved\s+successfully|claimed\s+successfully/i.test(lower)
+  ) {
+    return { status: 'success', errorCode: 0, message: text };
+  }
+
+  return null;
+}
+
+/**
+ * Checks whether a Shopee API / DOM response strictly means "already in user's wallet".
+ *
+ * @param {number|string|undefined} errCode
+ * @param {string} [message]
+ * @returns {boolean}
+ */
+export function isAlreadySavedResult(errCode, message = '') {
+  const num = Number(errCode);
+  if (num === 3 || num === 140003) return true;
+  if (!message) return false;
+
+  const lower = String(message).toLowerCase();
+  if (/hết lượt|lưu hết|nhận hết|không hợp lệ|không thành công|rất tiếc|thất bại|lỗi/i.test(lower)) {
+    return false;
+  }
+
+  return /(đã lưu|đã có|đã nhận|đã thu thập).*(trong ví|vào ví|rồi|trước đó)|already\s+(saved|claimed)/i.test(lower);
+}
+
+/**
+ * Normalizes a raw Shopee save_voucher API or DOM response into a canonical result object.
+ *
+ * @param {string} code
+ * @param {any} data
+ * @param {string} [sourceLabel]
+ */
+export function normalizeSaveResult(code, data, sourceLabel = '') {
+  const cleanCode = String(code || '').trim().toUpperCase();
+  if (!data || typeof data !== 'object') {
+    return {
+      success: false,
+      alreadySaved: false,
+      status: 'failed',
+      code: cleanCode,
+      errCode: -1,
+      message: 'Không nhận được phản hồi từ máy chủ Shopee'
+    };
+  }
+
+  const rawMsg = extractShopeeMessage(data);
+  const rawErr = data.error ?? data.errCode;
+  const errNum = rawErr === undefined || rawErr === null ? -1 : Number(rawErr);
+  const voucherTitle =
+    data.data?.voucher_basic_info?.title ||
+    data.data?.title ||
+    data.data?.ui_info?.title ||
+    '';
+
+  if (data.from_dom_toast && data.message) {
+    const classified = classifyDomToast(data.message);
+    const status = classified
+      ? classified.status
+      : errNum === 0
+        ? 'success'
+        : isAlreadySavedResult(errNum, data.message)
+          ? 'already_saved'
+          : 'failed';
+    const alreadySaved = status === 'already_saved';
+    const success = status === 'success' || alreadySaved;
+    return {
+      success,
+      alreadySaved,
+      status,
+      code: cleanCode,
+      errCode: classified ? classified.errorCode : errNum,
+      message: data.message,
+      voucherTitle,
+      voucherData: data
+    };
+  }
+
+  if (errNum === 0) {
+    const suffix = sourceLabel ? ` (${sourceLabel})` : '';
+    return {
+      success: true,
+      alreadySaved: false,
+      status: 'success',
+      code: cleanCode,
+      errCode: 0,
+      message: `Lưu thành công vào ví${suffix}!`,
+      voucherTitle,
+      voucherData: data.data
+    };
+  }
+
+  if (isAlreadySavedResult(errNum, rawMsg)) {
+    return {
+      success: true,
+      alreadySaved: true,
+      status: 'already_saved',
+      code: cleanCode,
+      errCode: errNum,
+      message: 'Mã voucher đã có sẵn trong ví của bạn!',
+      voucherTitle,
+      voucherData: data.data
+    };
+  }
+
+  return {
+    success: false,
+    alreadySaved: false,
+    status: 'failed',
+    code: cleanCode,
+    errCode: Number.isNaN(errNum) ? -1 : errNum,
+    message: formatShopeeError(errNum, rawMsg),
+    voucherTitle,
+    rawError: data
+  };
+}
+

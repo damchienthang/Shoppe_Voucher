@@ -10,7 +10,14 @@ import {
   claimBannerVoucher
 } from './utils/shopee-api.js';
 
-import { formatShopeeError, extractShopeeMessage, isShopeeMessage, isTargetZaloGroup } from './utils/parser.js';
+import {
+  formatShopeeError,
+  extractShopeeMessage,
+  isShopeeMessage,
+  isTargetZaloGroup,
+  isAlreadySavedResult,
+  normalizeSaveResult
+} from './utils/parser.js';
 
 // Keep track of active tasks & precise timers
 let activeBatchTask = null;
@@ -516,6 +523,46 @@ async function executeSaveVoucherInPage(voucherCode) {
         // ─────────────────────────────────────────────────────────────
         let capturedToast = null;
         const toastStart = Date.now();
+        const negativeFailurePatterns = [
+          /không\s+thành\s+công/i,
+          /chưa\s+thành\s+công/i,
+          /thất\s+bại/i,
+          /không\s+thể\s+(?:lưu|nhận|áp\s+dụng)/i,
+          /chưa\s+thể\s+(?:lưu|nhận|áp\s+dụng)/i,
+          /không\s+đủ\s+điều\s+kiện/i,
+          /không\s+hợp\s+lệ/i,
+          /không\s+tồn\s+tại/i,
+          /không\s+còn\s+hiệu\s+lực/i,
+          /rất\s+tiếc/i,
+          /tiếc\s+quá/i,
+          /hết\s+(?:lượt|mã|hạn|ngân\s+sách|suất)/i,
+          /đã\s+(?:nhận|lưu|dùng|sử\s+dụng)\s+hết/i,
+          /đã\s+được\s+(?:nhận|lưu|sử\s+dụng)\s+hết/i,
+          /đạt\s+giới\s+hạn/i,
+          /chưa\s+(?:đến|tới)\s+(?:giờ|khung\s+giờ|thời\s+gian)/i,
+          /chưa\s+(?:mở|bắt\s+đầu|có\s+hiệu\s+lực)/i,
+          /nhập\s+sai/i,
+          /sai\s+mã/i,
+          /vui\s+lòng\s+đăng\s+nhập/i,
+          /quá\s+tải/i
+        ];
+        const alreadySavedPatterns = [
+          /bạn\s+đã\s+(?:lưu|nhận)\s+(?:mã|voucher)/i,
+          /đã\s+(?:có|tồn\s+tại)\s+(?:sẵn\s+)?trong\s+ví/i,
+          /đã\s+lưu\s+(?:mã\s+này\s+)?(?:vào\s+ví\s+)?rồi/i,
+          /đã\s+thu\s+thập\s+(?:trước\s+đó|rồi)/i,
+          /already\s+(?:claimed|saved|collected)/i
+        ];
+        const newSuccessPatterns = [
+          /lưu\s+(?:mã|voucher)?\s*thành\s+công/i,
+          /nhận\s+(?:mã|voucher)?\s*thành\s+công/i,
+          /đã\s+lưu\s+(?:thành\s+công\s+)?vào\s+ví/i,
+          /thêm\s+vào\s+ví\s+thành\s+công/i,
+          /thu\s+thập\s+thành\s+công/i,
+          /^đã\s+lưu\s*!?$/i,
+          /^lưu\s+thành\s+công\s*!?$/i
+        ];
+
         while (Date.now() - toastStart < 2600) {
           const toastSelectors = [
             '.shopee-alert-popup',
@@ -525,37 +572,41 @@ async function executeSaveVoucherInPage(voucherCode) {
             'div[role="alert"]',
             '[class*="toast" i]',
             '[class*="alert-popup" i]',
-            '[class*="alert" i]',
-            '[class*="notification" i]',
-            '.voucher-card__tooltip',
             '[class*="voucher-status" i]',
-            '[class*="feedback" i]'
+            '[class*="error-msg" i]'
           ];
           const toastEls = Array.from(document.querySelectorAll(toastSelectors.join(',')));
           for (const t of toastEls) {
             if (t.closest('#sv-floating-widget') || t.closest('#sv-toast-container')) continue;
+            const rect = t.getBoundingClientRect();
+            if (rect.width === 0 || rect.height === 0) continue;
             const rawText = (t.innerText || t.textContent || '').trim();
-            if (rawText && rawText.length >= 3 && rawText.length <= 150) {
-              const textLower = rawText.toLowerCase();
-              if (
-                textLower.includes('thành công') ||
-                textLower.includes('đã có') ||
-                textLower.includes('đã lưu') ||
-                textLower.includes('đã nhận') ||
-                textLower.includes('hết lượt') ||
-                textLower.includes('hết mã') ||
-                textLower.includes('không hợp lệ') ||
-                textLower.includes('không tồn tại') ||
-                textLower.includes('nhập sai') ||
-                textLower.includes('chưa đến') ||
-                textLower.includes('khung giờ') ||
-                textLower.includes('điều kiện') ||
-                textLower.includes('rất tiếc') ||
-                textLower.includes('tiếc quá') ||
-                textLower.includes('voucher') ||
-                textLower.includes('mã')
-              ) {
-                capturedToast = { text: rawText, lower: textLower };
+            if (rawText && rawText.length >= 4 && rawText.length <= 200) {
+              const lower = rawText.toLowerCase();
+              const isQuotaExhausted =
+                /hết\s+(?:lượt|mã|ngân\s+sách|suất)/i.test(lower) ||
+                /đã\s+(?:nhận|lưu|dùng|sử\s+dụng)\s+hết/i.test(lower) ||
+                /đã\s+được\s+(?:nhận|lưu|sử\s+dụng)\s+hết/i.test(lower);
+
+              if (isQuotaExhausted) {
+                capturedToast = { text: rawText, errorCode: 2 };
+                break;
+              }
+              if (alreadySavedPatterns.some(re => re.test(lower))) {
+                capturedToast = { text: rawText, errorCode: 3 };
+                break;
+              }
+              if (negativeFailurePatterns.some(re => re.test(lower))) {
+                let errorCode = 4;
+                if (/chưa\s+(?:đến|tới|mở|bắt\s+đầu)|khung\s+giờ/i.test(lower)) errorCode = 7;
+                else if (/không\s+tồn\s+tại|nhập\s+sai|sai\s+mã/i.test(lower)) errorCode = 1;
+                else if (/hết\s+hạn/i.test(lower)) errorCode = 5;
+                else if (/đăng\s+nhập/i.test(lower)) errorCode = 140000;
+                capturedToast = { text: rawText, errorCode };
+                break;
+              }
+              if (newSuccessPatterns.some(re => re.test(lower))) {
+                capturedToast = { text: rawText, errorCode: 0 };
                 break;
               }
             }
@@ -565,26 +616,12 @@ async function executeSaveVoucherInPage(voucherCode) {
         }
 
         if (capturedToast) {
-          const { text: toastMsg, lower } = capturedToast;
-          let errorCode = 4;
-          if (lower.includes('thành công') || lower.includes('đã nhận') || lower.includes('vào ví')) {
-            errorCode = 0;
-          } else if (lower.includes('đã có') || lower.includes('đã lưu') || lower.includes('đã tồn tại')) {
-            errorCode = 3;
-          } else if (lower.includes('hết lượt') || lower.includes('hết mã') || lower.includes('hết ngân sách')) {
-            errorCode = 2;
-          } else if (lower.includes('chưa đến') || lower.includes('khung giờ') || lower.includes('chưa mở')) {
-            errorCode = 7;
-          } else if (lower.includes('không tồn tại') || lower.includes('nhập sai')) {
-            errorCode = 1;
-          }
-
           return {
             ok: true,
             data: {
-              error: errorCode,
-              message: toastMsg,
-              toast_message: toastMsg,
+              error: capturedToast.errorCode,
+              message: capturedToast.text,
+              toast_message: capturedToast.text,
               from_dom_toast: true
             }
           };
@@ -674,7 +711,7 @@ async function executeSaveVoucherInPage(voucherCode) {
       return { ok: true, data: lastData };
     }
 
-    return { ok: true, data };
+    return { ok: false, error: 'Không nhận được phản hồi từ máy chủ Shopee' };
   } catch (e) {
     return { ok: false, error: e.message };
   }
@@ -712,55 +749,9 @@ async function smartSaveVoucher(code) {
         if (results && results[0] && results[0].result) {
           const pageRes = results[0].result;
           if (pageRes.ok && pageRes.data) {
-            const data = pageRes.data;
-
-            // If captured directly from DOM toast notification, respect Shopee's official UI feedback 100%!
-            if (data.from_dom_toast && data.message) {
-              const isSuccess = data.error === 0 || data.error === 3;
-              console.log(`[Shopee Saver] Bắt được thông báo Shopee trên màn hình [${cleanCode}]: "${data.message}"`);
-              return {
-                success: isSuccess,
-                alreadySaved: data.error === 3,
-                code: cleanCode,
-                errCode: data.error,
-                message: data.message,
-                voucherData: data
-              };
-            }
-
-            if (data.error === 0) {
-              return {
-                success: true,
-                code: cleanCode,
-                errCode: 0,
-                message: 'Lưu thành công vào ví!',
-                voucherData: data.data
-              };
-            }
-
-            const rawShopeeMsg = extractShopeeMessage(data);
-            const friendlyMsg = formatShopeeError(data.error, rawShopeeMsg);
-
-            // Handle already in wallet as SUCCESS (Error 3 or 140003)
-            if (data.error === 3 || data.error === 140003 || friendlyMsg.includes('đã có') || friendlyMsg.includes('đã lưu')) {
-              return {
-                success: true,
-                alreadySaved: true,
-                code: cleanCode,
-                errCode: 3,
-                message: 'Mã voucher đã có sẵn trong ví của bạn!',
-                voucherData: data.data
-              };
-            }
-
-            console.log(`[Shopee Saver] Tab phản hồi kết quả lưu [${cleanCode}]: "${friendlyMsg}"`);
-            return {
-              success: false,
-              code: cleanCode,
-              errCode: data.error,
-              message: friendlyMsg,
-              rawError: data
-            };
+            const normalized = normalizeSaveResult(cleanCode, pageRes.data);
+            console.log(`[Shopee Saver] Tab phản hồi kết quả lưu [${cleanCode}] (${normalized.status}): "${normalized.message}"`);
+            return normalized;
           }
         }
       }
@@ -771,17 +762,8 @@ async function smartSaveVoucher(code) {
 
   // 2. Fast Path B: Direct Service Worker fetch via cookies (80ms - no waiting for tab creation!)
   const res = await saveVoucherByCode(cleanCode);
-  const friendlyMsg = formatShopeeError(res.errCode, res.message);
-
-  if (res.success || res.errCode === 3 || res.errCode === 140003 || friendlyMsg.includes('đã có') || friendlyMsg.includes('đã lưu')) {
-    return {
-      success: true,
-      alreadySaved: res.errCode === 3 || res.errCode === 140003,
-      code: cleanCode,
-      errCode: res.errCode,
-      message: (res.errCode === 3 || res.errCode === 140003) ? 'Mã voucher đã có sẵn trong ví của bạn!' : friendlyMsg,
-      voucherData: res.voucherData
-    };
+  if (res.success || res.alreadySaved) {
+    return res;
   }
 
   // 3. Try Local Bot Server if running
@@ -795,17 +777,18 @@ async function smartSaveVoucher(code) {
     if (botRes.ok) {
       const botData = await botRes.json();
       if (botData && typeof botData.success === 'boolean') {
-        return botData;
+        return normalizeSaveResult(cleanCode, {
+          error: botData.errCode ?? (botData.success ? 0 : -1),
+          message: botData.message,
+          data: botData.voucherData
+        });
       }
     }
   } catch (botErr) {
     // Bot server not running, continue
   }
 
-  return {
-    ...res,
-    message: friendlyMsg
-  };
+  return res;
 }
 
 /**
@@ -819,48 +802,6 @@ function broadcast(msg) {
   } catch (e) {
     // Ignore error
   }
-}
-
-/**
- * Clear any in-page toast containers from active browser tabs
- */
-function displayUniversalToastInPage() {
-  try {
-    const container = document.getElementById('sv-universal-toast-container');
-    if (container) container.remove();
-    const style = document.getElementById('sv-universal-toast-style');
-    if (style) style.remove();
-  } catch (_) {}
-}
-
-/**
- * Notifications disabled per user request: "bỏ tính năng thông báo và xóa hiện thông báo đi"
- */
-async function showNotification(title, message, isSuccess = true) {
-  // Completely silent - clean up any existing toast containers in tabs if present
-  try {
-    if (chrome.tabs && chrome.tabs.query && chrome.scripting) {
-      const activeTabs = await chrome.tabs.query({ active: true }).catch(() => []);
-      for (const tab of activeTabs) {
-        if (!tab || !tab.id || !tab.url) continue;
-        chrome.scripting.executeScript({
-          target: { tabId: tab.id },
-          func: () => {
-            document.getElementById('sv-universal-toast-container')?.remove();
-            document.getElementById('sv-universal-toast-style')?.remove();
-            document.getElementById('sv-zalo-toast-container')?.remove();
-          }
-        }).catch(() => {});
-      }
-    }
-  } catch (_) {}
-}
-
-/**
- * Disabled per user request (silent operation)
- */
-function showVoucherSaveResult(code, result, source = 'Shopee') {
-  // Silent per user request - no desktop notifications, no toasts
 }
 
 /**
@@ -932,14 +873,13 @@ async function autoClaimShopeeLink(rawUrl, groupName) {
       smartSaveVoucher(c.code).then(async result => {
         await appendHistory({
           code: c.code,
-          status: result.success ? 'SUCCESS' : 'FAILED',
+          status: result.alreadySaved ? 'ALREADY_SAVED' : (result.success ? 'SUCCESS' : 'FAILED'),
           message: result.message,
           time: new Date().toLocaleTimeString('vi-VN'),
           date: new Date().toLocaleDateString('vi-VN')
         });
-        showVoucherSaveResult(c.code, result, 'Link Shopee');
       }).catch(error => {
-        showVoucherSaveResult(c.code, { success: false, message: error.message }, 'Link Shopee');
+        console.warn(`[Auto-Claim Link] Lỗi lưu mã ${c.code}:`, error.message);
       });
     }
 
@@ -959,7 +899,6 @@ async function autoClaimShopeeLink(rawUrl, groupName) {
     });
 
     console.log(`[Zalo Link Auto-Claim] Đã mở tab ngầm cho link mã: ${targetUrl} (Tab #${tab.id})`);
-    showNotification('Săn Voucher Từ Link', `Đang tự động mở và lưu voucher từ nhóm [${groupName}]`);
 
     activeAutoClaimTabs.set(tab.id, {
       startTime: Date.now(),
@@ -1057,8 +996,6 @@ async function handleZaloMessage(payload) {
         date: new Date().toLocaleDateString('vi-VN')
       });
 
-      showVoucherSaveResult(code, res, `Zalo: ${groupName}`);
-
       // Safe human-like delay with random jitter between consecutive voucher codes to prevent Shopee bot scanning
       if (i < codes.length - 1) {
         const safeDelay = 2600 + Math.floor(Math.random() * 1000); // 2.6s - 3.6s
@@ -1095,6 +1032,7 @@ async function runBatchSave({ codes, delayMs = 1800, isScheduled = false }) {
     total: codes.length,
     current: 0,
     successCount: 0,
+    alreadySavedCount: 0,
     failCount: 0,
     results: [],
     isCancelled: false,
@@ -1125,18 +1063,23 @@ async function runBatchSave({ codes, delayMs = 1800, isScheduled = false }) {
 
     const res = await smartSaveVoucher(code);
     const friendlyMsg = res.message;
-    const isSuccess = res.success || res.alreadySaved;
+    const isAlreadySaved = Boolean(res.alreadySaved) || res.status === 'already_saved';
+    const isSuccess = Boolean(res.success) || isAlreadySaved;
+    const status = res.status || (isAlreadySaved ? 'already_saved' : isSuccess ? 'success' : 'failed');
     const resultItem = {
       code,
       success: isSuccess,
-      alreadySaved: res.alreadySaved,
+      alreadySaved: isAlreadySaved,
+      status,
       errCode: res.errCode,
       message: friendlyMsg,
+      voucherTitle: res.voucherTitle || '',
       timestamp: Date.now()
     };
 
     if (isSuccess) {
       activeBatchTask.successCount++;
+      if (isAlreadySaved) activeBatchTask.alreadySavedCount++;
     } else {
       activeBatchTask.failCount++;
     }
@@ -1152,15 +1095,11 @@ async function runBatchSave({ codes, delayMs = 1800, isScheduled = false }) {
 
     await appendHistory({
       code,
-      status: res.success ? 'SUCCESS' : 'FAILED',
+      status: isAlreadySaved ? 'ALREADY_SAVED' : isSuccess ? 'SUCCESS' : 'FAILED',
       message: friendlyMsg,
       time: new Date().toLocaleTimeString('vi-VN'),
       date: new Date().toLocaleDateString('vi-VN')
     });
-
-    if (res.success || codes.length === 1) {
-      showVoucherSaveResult(code, res, 'Lưu mã');
-    }
 
     if (i < codes.length - 1 && delayMs > 0) {
       // Add random jitter to mimic natural human pacing and bypass bot pattern recognition
@@ -1173,6 +1112,7 @@ async function runBatchSave({ codes, delayMs = 1800, isScheduled = false }) {
   const summary = {
     total: activeBatchTask.total,
     successCount: activeBatchTask.successCount,
+    alreadySavedCount: activeBatchTask.alreadySavedCount,
     failCount: activeBatchTask.failCount,
     results: activeBatchTask.results,
     durationMs: Date.now() - activeBatchTask.startTime
@@ -1185,14 +1125,6 @@ async function runBatchSave({ codes, delayMs = 1800, isScheduled = false }) {
     type: 'BATCH_COMPLETED',
     summary
   });
-
-  if (summary.total > 1) {
-    showNotification(
-      summary.successCount > 0 ? '🎉 Lưu Hàng Loạt Hoàn Tất!' : '⚠️ Kết Quả Lưu Mã Hàng Loạt',
-      `Đã xử lý xong ${summary.total} mã: ${summary.successCount} thành công, ${summary.failCount} thất bại.`,
-      summary.successCount > 0
-    );
-  }
 
   return summary;
 }
@@ -1300,11 +1232,6 @@ async function startBannerWatch(config = {}) {
   } else {
     addBannerWatchLog(`Cảnh báo: Chưa tìm thấy nguồn dữ liệu voucher trên banner (sẽ thử tải lại khi quét)`, 'warning');
   }
-
-  showNotification(
-    'Bắt Đầu Canh Mã Back',
-    `Đang canh voucher ${modeLabel} trên ${slug}`
-  );
 
   broadcast({
     type: 'BANNER_WATCH_STATUS',
@@ -1566,10 +1493,6 @@ async function runBannerWatchCycle() {
 
     if (now > endWindow) {
       addBannerWatchLog(`🏁 Đã hoàn thành Dải Giờ Vàng (${bannerWatchState.windowDurationMins} phút). Săn được ${bannerWatchState.successCount} voucher.`);
-      showNotification(
-        'Hoàn Tất Dải Giờ Vàng',
-        `Đã hoàn thành canh mã khung giờ vàng trên ${bannerWatchState.slug}. Săn được ${bannerWatchState.successCount} voucher!`
-      );
       stopBannerWatch();
       return;
     }
@@ -1670,12 +1593,6 @@ async function runBannerWatchCycle() {
 
             addBannerWatchLog(`🎉 ✅ LƯU THÀNH CÔNG: [${v.title}] vào ví Shopee!`, 'success');
 
-            showVoucherSaveResult(
-              v.voucherCode || `PROMO_${v.promotionId}`,
-              claimRes,
-              `Canh API: ${bannerWatchState.slug}`
-            );
-
             await appendHistory({
               code: v.voucherCode || `PROMO_${v.promotionId}`,
               status: 'SUCCESS',
@@ -1697,20 +1614,10 @@ async function runBannerWatchCycle() {
 
             const errDetail = claimRes.errCode ? ` [mã lỗi: ${claimRes.errCode}]` : '';
             addBannerWatchLog(`Lưu [${v.title}] thất bại (lần ${newFails}): ${claimRes.message}${errDetail}`, 'warning');
-            if (newFails === 1) {
-              showVoucherSaveResult(
-                v.voucherCode || `PROMO_${v.promotionId}`,
-                claimRes,
-                `Canh API: ${bannerWatchState.slug}`
-              );
-            }
 
-            // Only stop retrying when Shopee confirms this account already has the voucher.
-            // Availability can change between polling and claiming, so temporary quota or
-            // eligibility errors must remain retryable for a later back event.
-            const isAlreadySaved =
-              claimRes.errCode === 4 ||
-              claimRes.message?.includes('đã lưu');
+            // Only stop retrying when Shopee confirms this account already has the voucher (error 3 / 140003).
+            // Error 4 is invalid/ineligible and must NOT be treated as already saved.
+            const isAlreadySaved = isAlreadySavedResult(claimRes.errCode, claimRes.message);
 
             if (isAlreadySaved) {
               bannerWatchState.claimedPromoIds.add(v.promotionId);
@@ -1759,12 +1666,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         const isSuccess = res.success || res.alreadySaved;
         await appendHistory({
           code: payload.code,
-          status: isSuccess ? 'SUCCESS' : 'FAILED',
+          status: res.alreadySaved ? 'ALREADY_SAVED' : (isSuccess ? 'SUCCESS' : 'FAILED'),
           message: res.message,
           time: new Date().toLocaleTimeString('vi-VN'),
           date: new Date().toLocaleDateString('vi-VN')
         });
-        showVoucherSaveResult(payload.code, res, 'Lưu thủ công');
         sendResponse(res);
       });
       return true;
@@ -1844,9 +1750,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       const tabId = sender?.tab?.id;
       const count = payload?.count || request?.count || 0;
       console.log(`[Auto-Claim Link] Tab #${tabId} đã hoàn tất lưu voucher: ${count} mã`);
-      if (count > 0) {
-        showNotification('Lưu Voucher Thành Công', `Đã tự động lưu thành công ${count} voucher từ link!`);
-      }
       if (tabId && activeAutoClaimTabs.has(tabId)) {
         activeAutoClaimTabs.delete(tabId);
         setTimeout(() => {

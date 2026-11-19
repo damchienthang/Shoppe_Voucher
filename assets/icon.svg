@@ -1,16 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
   <defs>
     <linearGradient id="shopeeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#FF5722"/>
+      <stop offset="0%" stop-color="#FF5C26"/>
       <stop offset="100%" stop-color="#EE4D2D"/>
     </linearGradient>
     <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
-      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-opacity="0.25"/>
+      <feDropShadow dx="0" dy="3" stdDeviation="3" flood-opacity="0.2"/>
     </filter>
   </defs>
   <rect width="128" height="128" rx="28" fill="url(#shopeeGrad)"/>
   <g filter="url(#shadow)">
-    <path d="M26 36C26 31.58 29.58 28 34 28H94C98.42 28 102 31.58 102 36V54C96.48 54 92 58.48 92 64C92 69.52 96.48 74 102 74V92C102 96.42 98.42 100 94 100H34C29.58 100 26 96.42 26 92V74C31.52 74 36 69.52 36 64C36 58.48 31.52 54 26 54V36Z" fill="#FFFFFF"/>
+    <path d="M22 39C22 34.03 26.03 30 31 30H97C101.97 30 106 34.03 106 39V53.5C100.2 53.5 95.5 58.2 95.5 64C95.5 69.8 100.2 74.5 106 74.5V89C106 93.97 101.97 98 97 98H31C26.03 98 22 93.97 22 89V74.5C27.8 74.5 32.5 69.8 32.5 64C32.5 58.2 27.8 53.5 22 53.5V39Z" fill="#FFFFFF"/>
   </g>
-  <path d="M68 38L48 66H62L58 90L82 60H68L74 38Z" fill="#EE4D2D"/>
+  <path d="M68 37L47 66H61L57 91L82 59H68L73 37Z" fill="#EE4D2D"/>
 </svg>

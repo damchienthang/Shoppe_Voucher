@@ -119,10 +119,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     },
     'tab-banner-watcher': {
       title: 'Canh Mã Back Banner (Dải Giờ Vàng & Canh Ngẫu Nhiên 24/7)',
-      desc: 'Tự động rà soát API Shopee và chớp mã back ngẫu nhiên'
+      desc: 'Tự động rà soát API Shopee và chớp mã back ngẫu nhiên trực tiếp vào ví'
     },
     'tab-settings': {
-      title: 'Cài ĐẶt Nâng Cao',
+      title: 'Cài Đặt Hệ Thống',
       desc: 'Tùy chỉnh tốc độ gửi request, độ trễ và các cấu hình hệ thống'
     }
   };
@@ -205,6 +205,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     requestAnimationFrame(tick);
   }
 
+  const DEFAULT_AVATAR_URL = '../assets/icon48.png';
+
+  if (userAvatarImg) {
+    userAvatarImg.addEventListener('error', () => {
+      if (!userAvatarImg.src.endsWith('icon48.png')) {
+        userAvatarImg.src = DEFAULT_AVATAR_URL;
+      }
+    });
+  }
+
   async function checkUserAccount() {
     userDisplayName.textContent = 'Đang kiểm tra...';
     if (userOnlineDot) {
@@ -218,12 +228,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (userOnlineDot) {
           userOnlineDot.className = 'online-indicator online';
         }
-        if (res.avatar) userAvatarImg.src = res.avatar;
+        if (userAvatarImg) {
+          userAvatarImg.src = res.avatar || DEFAULT_AVATAR_URL;
+        }
       } else {
         userDisplayName.textContent = 'Chưa đăng nhập';
         userAccountId.textContent = 'Hãy đăng nhập shopee.vn';
         if (userOnlineDot) {
           userOnlineDot.className = 'online-indicator';
+        }
+        if (userAvatarImg) {
+          userAvatarImg.src = DEFAULT_AVATAR_URL;
         }
       }
     });
@@ -276,7 +291,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   btnRunBatch.addEventListener('click', () => {
     const parsed = extractVoucherCodes(batchInputCodes.value);
     if (parsed.length === 0) {
-      alert('Vui lòng nhập ít nhất một mã voucher hợp lệ!');
+      batchProgressLabel.textContent = 'Vui lòng nhập ít nhất 1 mã voucher hợp lệ (>= 5 ký tự chữ hoặc số)!';
+      batchInputCodes.focus();
       return;
     }
 
@@ -298,7 +314,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       btnRunBatch.classList.remove('hidden');
       btnStopBatch.classList.add('hidden');
       if (res && res.error) {
-        alert(res.error);
+        batchProgressLabel.textContent = res.error;
       }
     });
   });
@@ -341,16 +357,22 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     batchResultsTbody.innerHTML = filtered.map((item, idx) => {
       const timeStr = new Date(item.timestamp).toLocaleTimeString('vi-VN');
+      const isAlreadySaved = Boolean(item.alreadySaved) || item.status === 'already_saved';
+      const badgeClass = isAlreadySaved ? 'info' : (item.success ? 'success' : 'failed');
+      const badgeLabel = isAlreadySaved ? 'Đã có trong ví' : (item.success ? 'Thành công' : 'Thất bại');
+      const detailText = item.voucherTitle && item.success && !isAlreadySaved
+        ? `${item.message} (${item.voucherTitle})`
+        : (item.message || '');
       return `
         <tr>
           <td>${idx + 1}</td>
-          <td class="code-cell">${item.code}</td>
+          <td class="code-cell">${escapeHtml(item.code)}</td>
           <td>
-            <span class="status-badge ${item.success ? 'success' : 'failed'}">
-              ${item.success ? 'Thành công' : 'Thất bại'}
+            <span class="status-badge ${badgeClass}">
+              ${badgeLabel}
             </span>
           </td>
-          <td>${item.message}</td>
+          <td>${escapeHtml(detailText)}</td>
           <td>${timeStr}</td>
         </tr>
       `;
@@ -359,7 +381,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   btnExportResults.addEventListener('click', () => {
     if (currentResults.length === 0) {
-      alert('Chưa có dữ liệu kết quả để xuất!');
+      batchProgressLabel.textContent = 'Chưa có dữ liệu kết quả để xuất file CSV!';
       return;
     }
 
@@ -367,7 +389,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const rows = currentResults.map((r, i) => [
       i + 1,
       r.code,
-      r.success ? 'Thành công' : 'Thất bại',
+      (r.alreadySaved || r.status === 'already_saved') ? 'Đã có trong ví' : (r.success ? 'Thành công' : 'Thất bại'),
       `"${(r.message || '').replace(/"/g, '""')}"`,
       new Date(r.timestamp).toLocaleString('vi-VN')
     ]);
@@ -459,27 +481,29 @@ document.addEventListener('DOMContentLoaded', async () => {
     let botIsRunning = false;
 
     async function checkBotStatus() {
-      try {
-        const res = await fetch('http://127.0.0.1:23232/status', { method: 'GET' });
-        if (res.ok) {
-          const data = await res.json();
-          botIsOnline = true;
-          botIsRunning = data.running;
+      if (!window.__SHOPEE_PREVIEW_MODE__) {
+        try {
+          const res = await fetch('http://127.0.0.1:23232/status', { method: 'GET' });
+          if (res.ok) {
+            const data = await res.json();
+            botIsOnline = true;
+            botIsRunning = data.running;
 
-          if (botDot) botDot.className = botIsRunning ? 'bot-dot online' : 'bot-dot paused';
-          if (botStatusText) {
-            botStatusText.innerHTML = botIsRunning
-              ? `Bot Node.js đang chạy ngầm (Đã bắt: <strong>${data.stats?.messagesDetected || 0}</strong> tin, Lưu: <strong>${data.stats?.codesSaved || 0}</strong> mã)`
-              : 'Bot Node.js đang tạm dừng';
+            if (botDot) botDot.className = botIsRunning ? 'bot-dot online' : 'bot-dot paused';
+            if (botStatusText) {
+              botStatusText.innerHTML = botIsRunning
+                ? `Bot Node.js đang chạy ngầm (Đã bắt: <strong>${data.stats?.messagesDetected || 0}</strong> tin, Lưu: <strong>${data.stats?.codesSaved || 0}</strong> mã)`
+                : 'Bot Node.js đang tạm dừng';
+            }
+            if (btnToggleBot) {
+              btnToggleBot.textContent = botIsRunning ? 'Tắt Chạy Ngầm' : 'Bật Chạy Ngầm';
+              btnToggleBot.className = botIsRunning ? 'btn btn-secondary btn-sm' : 'btn btn-primary btn-sm';
+            }
+            return;
           }
-          if (btnToggleBot) {
-            btnToggleBot.textContent = botIsRunning ? 'Tắt Chạy Ngầm' : 'Bật Chạy Ngầm';
-            btnToggleBot.className = botIsRunning ? 'btn btn-secondary btn-sm' : 'btn btn-primary btn-sm';
-          }
-          return;
+        } catch (e) {
+          // Bot is offline, check if background Zalo tab is running in Chrome
         }
-      } catch (e) {
-        // Bot is offline, check if background Zalo tab is running in Chrome
       }
 
       botIsOnline = false;
@@ -575,7 +599,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       zaloStreamContainer.innerHTML = `
         <div class="empty-feed">
           <h4>Đang chờ tin nhắn mới từ nhóm Zalo mục tiêu...</h4>
-          <p>Mở <a href="https://chat.zalo.me" target="_blank" style="color: #EE4D2D;">chat.zalo.me</a> trên trình duyệt. Mọi tin nhắn chứa mã hoặc link Shopee từ nhóm [23] LONGHOUSEE sẽ xuất hiện ngay tại đây!</p>
+          <p>Mở <a href="https://chat.zalo.me" target="_blank" class="accent-link">chat.zalo.me</a> trên trình duyệt. Mọi tin nhắn chứa mã hoặc link Shopee từ nhóm [23] LONGHOUSEE sẽ xuất hiện ngay tại đây!</p>
         </div>
       `;
       return;
@@ -584,13 +608,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     zaloStreamContainer.innerHTML = stream.map(item => {
       const codeHtml = (item.codes || []).map(code => {
         const res = (item.results || []).find(r => r.code === code);
+        const isAlreadySaved = res ? (Boolean(res.alreadySaved) || res.status === 'already_saved') : false;
         const isSuccess = res ? res.success : false;
-        const msg = res ? (res.message || (isSuccess ? 'Đã lưu' : 'Thất bại')) : 'Đang xử lý';
-        const badgeClass = res ? (isSuccess ? 'success' : 'failed') : 'pending';
+        const msg = res ? (res.message || (isAlreadySaved ? 'Đã có trong ví' : isSuccess ? 'Đã lưu' : 'Thất bại')) : 'Đang xử lý';
+        const badgeClass = res ? (isAlreadySaved ? 'info' : isSuccess ? 'success' : 'failed') : 'pending';
         return `
           <div class="feed-chip ${badgeClass}">
-            <span class="chip-code">${code}</span>
-            <span class="chip-status">${msg}</span>
+            <span class="chip-code">${escapeHtml(code)}</span>
+            <span class="chip-status">${escapeHtml(msg)}</span>
           </div>
         `;
       }).join('');
@@ -602,8 +627,8 @@ document.addEventListener('DOMContentLoaded', async () => {
           displayUrl = u.hostname + u.pathname;
         } catch (e) {}
         return `
-          <a href="${link}" target="_blank" class="feed-link-chip" title="${link}">
-            Mở Link: ${displayUrl}
+          <a href="${escapeHtml(link)}" target="_blank" class="feed-link-chip" title="${escapeHtml(link)}">
+            Mở Link: ${escapeHtml(displayUrl)}
           </a>
         `;
       }).join('');
@@ -612,10 +637,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         <div class="zalo-msg-card">
           <div class="zalo-msg-header">
             <div class="zalo-msg-group">
-              <span class="zalo-group-pill">${item.groupName || 'Nhóm Zalo'}</span>
-              <span class="zalo-msg-sender">${item.senderName || 'Thành viên'}</span>
+              <span class="zalo-group-pill">${escapeHtml(item.groupName || 'Nhóm Zalo')}</span>
+              <span class="zalo-msg-sender">${escapeHtml(item.senderName || 'Thành viên')}</span>
             </div>
-            <span class="zalo-msg-time">${item.timeStr || ''}</span>
+            <span class="zalo-msg-time">${escapeHtml(item.timeStr || '')}</span>
           </div>
 
           <div class="zalo-msg-text">${escapeHtml(item.text)}</div>
@@ -639,10 +664,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   btnClearZaloFeed.addEventListener('click', async () => {
-    if (confirm('Bạn có chắc chắn muốn xóa toàn bộ luồng tin Zalo không?')) {
-      await chrome.storage.local.remove('zaloStream');
-      loadZaloStream();
-    }
+    await chrome.storage.local.set({ zaloStream: [] });
+    loadZaloStream();
   });
 
   function escapeHtml(str) {
@@ -689,13 +712,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   btnActivateSchedule.addEventListener('click', () => {
     if (!customScheduleTime.value) {
-      alert('Vui lòng chọn thời gian hẹn giờ săn mã!');
+      scheduleStatusText.textContent = 'Vui lòng chọn thời gian hẹn giờ săn mã trước khi kích hoạt!';
+      customScheduleTime.focus();
       return;
     }
 
     const parsed = extractVoucherCodes(schedulerCodesInput.value);
     if (parsed.length === 0) {
-      alert('Vui lòng nhập ít nhất 1 mã voucher để săn vào khung giờ này!');
+      scheduleStatusText.textContent = 'Vui lòng nhập ít nhất 1 mã voucher hợp lệ để săn vào khung giờ này!';
+      schedulerCodesInput.focus();
       return;
     }
 
@@ -703,7 +728,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const targetTimestamp = targetDate.getTime();
 
     if (targetTimestamp <= Date.now() + timeOffsetMs) {
-      alert('Thời gian hẹn giờ phải ở tương lai!');
+      scheduleStatusText.textContent = 'Thời gian hẹn giờ phải nằm ở tương lai!';
+      customScheduleTime.focus();
       return;
     }
 
@@ -832,6 +858,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   function drawWifiChart() {
     if (!wifiSpeedChart) return;
     const context = wifiSpeedChart.getContext('2d');
+    const styles = getComputedStyle(document.documentElement);
+    const gridColor = styles.getPropertyValue('--shopee-border').trim() || '#3b3d57';
+    const lineColor = styles.getPropertyValue('--shopee-primary').trim() || '#7aa2f7';
     const width = wifiSpeedChart.clientWidth || 300;
     const height = 86;
     const ratio = window.devicePixelRatio || 1;
@@ -839,7 +868,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     wifiSpeedChart.height = height * ratio;
     context.scale(ratio, ratio);
     context.clearRect(0, 0, width, height);
-    context.strokeStyle = '#F1D8D1';
+    context.strokeStyle = gridColor;
     context.lineWidth = 1;
     [20, 43, 66].forEach(y => {
       context.beginPath();
@@ -856,23 +885,31 @@ document.addEventListener('DOMContentLoaded', async () => {
       const y = height - 8 - (Math.min(sample, maxValue) / maxValue) * (height - 18);
       index === 0 ? context.moveTo(x, y) : context.lineTo(x, y);
     });
-    context.strokeStyle = '#EE4D2D';
+    context.strokeStyle = lineColor;
     context.lineWidth = 2.5;
     context.stroke();
   }
 
   function getWifiQuality(ping) {
-    if (ping < 80) return { label: 'Tốt - kết nối ổn định', color: '#26AA99' };
-    if (ping < 180) return { label: 'Khá - có thể săn mã', color: '#D97706' };
-    return { label: 'Yếu - nên kiểm tra Wi-Fi', color: '#DC2626' };
+    const styles = getComputedStyle(document.documentElement);
+    const successColor = styles.getPropertyValue('--shopee-success').trim() || '#34d399';
+    const warningColor = styles.getPropertyValue('--shopee-warning').trim() || '#fbbf24';
+    const dangerColor = styles.getPropertyValue('--shopee-danger').trim() || '#f87171';
+    if (ping < 80) return { label: 'Tốt - kết nối ổn định', color: successColor };
+    if (ping < 180) return { label: 'Khá - có thể săn mã', color: warningColor };
+    return { label: 'Yếu - nên kiểm tra Wi-Fi', color: dangerColor };
   }
 
   async function measureWifi() {
     if (!wifiPingValue) return;
     const startedAt = performance.now();
+    const isRealExtension = Boolean(chrome?.runtime?.id);
+    const probeUrl = isRealExtension
+      ? `https://shopee.vn/favicon.ico?wifi_probe=${Date.now()}`
+      : `/api/ping?wifi_probe=${Date.now()}`;
     try {
-      await fetch(`https://shopee.vn/favicon.ico?wifi_probe=${Date.now()}`, {
-        method: 'HEAD',
+      await fetch(probeUrl, {
+        method: isRealExtension ? 'HEAD' : 'GET',
         cache: 'no-store'
       });
       const ping = Math.max(1, Math.round(performance.now() - startedAt));
@@ -885,9 +922,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       wifiSampleCount.textContent = `${wifiSamples.length} mẫu`;
       drawWifiChart();
     } catch (error) {
+      const dangerColor = getComputedStyle(document.documentElement).getPropertyValue('--shopee-danger').trim() || '#f87171';
       wifiPingValue.textContent = '--';
       wifiQualityLabel.textContent = 'Không đo được kết nối';
-      wifiQualityLabel.style.color = '#DC2626';
+      wifiQualityLabel.style.color = dangerColor;
     }
   }
 
@@ -898,14 +936,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   window.addEventListener('resize', drawWifiChart);
 
-  // Mode Selection
+  // Mode Selection (uses CSS classes so dark/light themes keep high contrast)
   if (labelModeWindow && labelModeContinuous) {
     labelModeWindow.addEventListener('click', () => {
       selectedBwMode = 'WINDOW';
-      labelModeWindow.style.border = '2px solid #EE4D2D';
-      labelModeWindow.style.background = '#FFFBF8';
-      labelModeContinuous.style.border = '1px solid #E5E7EB';
-      labelModeContinuous.style.background = '#fff';
+      labelModeWindow.classList.add('active');
+      labelModeContinuous.classList.remove('active');
       const radio = labelModeWindow.querySelector('input');
       if (radio) radio.checked = true;
       if (bwWindowOptions) bwWindowOptions.classList.remove('hidden');
@@ -913,10 +949,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     labelModeContinuous.addEventListener('click', () => {
       selectedBwMode = 'CONTINUOUS';
-      labelModeContinuous.style.border = '2px solid #EE4D2D';
-      labelModeContinuous.style.background = '#FFFBF8';
-      labelModeWindow.style.border = '1px solid #E5E7EB';
-      labelModeWindow.style.background = '#fff';
+      labelModeContinuous.classList.add('active');
+      labelModeWindow.classList.remove('active');
       const radio = labelModeContinuous.querySelector('input');
       if (radio) radio.checked = true;
       if (bwWindowOptions) bwWindowOptions.classList.add('hidden');
@@ -936,10 +970,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   function appendBannerLog(timeStr, text, level = 'info') {
     if (!bwLogsContainer) return;
-    const color = level === 'success' ? '#34D399' : (level === 'warning' ? '#FBBF24' : (level === 'error' ? '#F87171' : '#9CA3AF'));
+    const color =
+      level === 'success'
+        ? '#4ADE80'
+        : level === 'warning'
+          ? '#FCD34D'
+          : level === 'error'
+            ? '#FCA5A5'
+            : '#E2E8F0';
     const div = document.createElement('div');
-    div.style.marginBottom = '4px';
-    div.innerHTML = `<span style="color: #6B7280;">[${timeStr}]</span> <span style="color: ${color};">${escapeHtml(text)}</span>`;
+    div.className = 'bw-log-entry';
+    div.innerHTML = `<span class="bw-log-time">[${escapeHtml(timeStr)}]</span> <span style="color: ${color};">${escapeHtml(text)}</span>`;
     bwLogsContainer.appendChild(div);
     bwLogsContainer.scrollTop = bwLogsContainer.scrollHeight;
   }
@@ -947,7 +988,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (bwBtnClearLogs) {
     bwBtnClearLogs.addEventListener('click', () => {
       if (bwLogsContainer) {
-        bwLogsContainer.innerHTML = '<div style="color: #6B7280;">[Hệ thống] Đã xóa lịch sử log quét API.</div>';
+        bwLogsContainer.innerHTML = '<div class="log-init-msg">[Hệ thống] Đã xóa lịch sử log quét API.</div>';
       }
     });
   }
@@ -1194,7 +1235,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       btnStopBatch.classList.add('hidden');
       batchProgressBar.style.width = '100%';
       batchProgressPercent.textContent = '100%';
-      batchProgressLabel.textContent = `Hoàn thành lưu mã! (Thành công: ${msg.summary.successCount}/${msg.summary.total})`;
+      const alreadySaved = Number(msg.summary.alreadySavedCount || 0);
+      const newlySaved = Math.max(0, Number(msg.summary.successCount || 0) - alreadySaved);
+      const failed = Number(msg.summary.failCount || 0);
+      batchProgressLabel.textContent = `Hoàn thành (${msg.summary.total} mã): ${newlySaved} lưu mới, ${alreadySaved} đã có trong ví, ${failed} thất bại`;
     }
 
     if (msg.type === 'ZALO_STREAM_UPDATE') {

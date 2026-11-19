@@ -3,7 +3,7 @@
  * Handles voucher saving, promotion claiming, wallet querying, and server time synchronization.
  */
 
-import { formatShopeeError, extractShopeeMessage } from './parser.js';
+import { formatShopeeError, extractShopeeMessage, normalizeSaveResult } from './parser.js';
 
 const SHOPEE_DOMAIN = 'https://shopee.vn';
 
@@ -248,26 +248,8 @@ export async function saveVoucherByCode(voucherCode) {
       const data = await res.json();
       lastErrorData = data;
 
-      if (data.error === 0) {
-        return {
-          success: true,
-          code: cleanCode,
-          errCode: 0,
-          message: `Lưu thành công vào ví (${attempt.label})!`,
-          voucherData: data.data
-        };
-      }
-
-      // Handle already in wallet as SUCCESS (Error 3 or 140003)
-      if (data.error === 3 || data.error === 140003) {
-        return {
-          success: true,
-          alreadySaved: true,
-          code: cleanCode,
-          errCode: data.error,
-          message: 'Mã voucher đã có sẵn trong ví của bạn!',
-          voucherData: data.data
-        };
+      if (data.error === 0 || data.error === 3 || data.error === 140003) {
+        return normalizeSaveResult(cleanCode, data, attempt.label);
       }
 
       // 2. Try active v4 microsite endpoint with simulated mobile source
@@ -294,21 +276,15 @@ export async function saveVoucherByCode(voucherCode) {
   }
 
   if (lastErrorData) {
-    const rawShopeeMsg = extractShopeeMessage(lastErrorData);
-    const reasonMsg = formatShopeeError(lastErrorData.error, rawShopeeMsg);
-    console.log(`[Shopee Voucher Saver] Phản hồi khi lưu [${cleanCode}]: "${reasonMsg}"`);
-
-    return {
-      success: false,
-      code: cleanCode,
-      errCode: lastErrorData.error,
-      message: reasonMsg,
-      rawError: lastErrorData
-    };
+    const normalized = normalizeSaveResult(cleanCode, lastErrorData);
+    console.log(`[Shopee Voucher Saver] Phản hồi khi lưu [${cleanCode}] (${normalized.status}): "${normalized.message}"`);
+    return normalized;
   }
 
   return {
     success: false,
+    alreadySaved: false,
+    status: 'failed',
     code: cleanCode,
     errCode: -1,
     message: 'Không thể kết nối tới máy chủ Shopee (đã thử cả Mobile App & Web)'
@@ -330,24 +306,8 @@ async function trySaveVoucherMicrositeV4(voucherCode, headers, callerSource = 'R
       credentials: 'include'
     });
     const data = await res.json();
-    if (data.error === 0) {
-      return {
-        success: true,
-        code: voucherCode,
-        errCode: 0,
-        message: 'Lưu thành công vào ví (v4 Mobile)!',
-        voucherData: data.data
-      };
-    }
-    if (data.error === 3 || data.error === 140003) {
-      return {
-        success: true,
-        alreadySaved: true,
-        code: voucherCode,
-        errCode: data.error,
-        message: 'Mã voucher đã có sẵn trong ví của bạn!',
-        voucherData: data.data
-      };
+    if (data.error === 0 || data.error === 3 || data.error === 140003) {
+      return normalizeSaveResult(voucherCode, data, 'v4 Mobile');
     }
   } catch (e) {
     // Ignore fallback error
@@ -401,14 +361,12 @@ export async function claimVoucherPromotion(voucherPromotionId, signature = '') 
     }
 
     const data = await res.json();
-    return {
-      success: data.error === 0,
-      errCode: data.error,
-      message: data.error === 0 ? 'Nhận mã thành công!' : (data.error_msg || 'Không thể nhận mã')
-    };
+    return normalizeSaveResult(`PROMO_${voucherPromotionId}`, data);
   } catch (err) {
     return {
       success: false,
+      alreadySaved: false,
+      status: 'failed',
       errCode: -1,
       message: `Lỗi kết nối tới Shopee: ${err.message}`
     };
@@ -806,28 +764,14 @@ export async function claimBannerVoucher(promotionId, signature = '', voucherCod
 
       if (res.ok) {
         const data = await res.json();
-        if (data.error === 0) {
-          return {
-            success: true,
-            code: cleanCode || `PROMO_${promotionId}`,
-            errCode: 0,
-            message: 'Lưu voucher thành công vào ví!',
-            voucherData: data.data
-          };
+        const targetCode = cleanCode || `PROMO_${promotionId}`;
+        if (data.error === 0 || data.error === 3 || data.error === 140003) {
+          return normalizeSaveResult(targetCode, data);
         }
-
-        const rawShopeeMsg = extractShopeeMessage(data);
-        const friendlyMsg = formatShopeeError(data.error, rawShopeeMsg);
 
         // If specific error, return directly
         if (data.error !== 140000 && data.error !== -1) {
-          return {
-            success: false,
-            code: cleanCode || `PROMO_${promotionId}`,
-            errCode: data.error,
-            message: friendlyMsg,
-            rawError: data
-          };
+          return normalizeSaveResult(targetCode, data);
         }
       }
     } catch (e) {

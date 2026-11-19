@@ -116,7 +116,7 @@ assert.ok(urlQueryCodes.some(c => c.code === 'PROMO100K'), 'Phải bóc được
 assert.ok(urlQueryCodes.some(c => c.code === 'COUPON25K'), 'Phải bóc được coupon=COUPON25K');
 
 // Case B5: Link banner Shopee VIP có đầy đủ tham số affiliate & tracking
-const vipAffiliateUrl = 'https://shopee.vn/m/goi-ShopeeVIP?mmp_pid=an_00000000000&uls_trackid=demo_track_id&utm_campaign=id_test&utm_content=test&utm_medium=affiliates&utm_source=an_00000000000&utm_term=test';
+const vipAffiliateUrl = 'https://shopee.vn/m/goi-ShopeeVIP?mmp_pid=an_17395770075&uls_trackid=56klhckn00e0&utm_campaign=id_9YnGki5Iw1F&utm_content=----&utm_medium=affiliates&utm_source=an_17395770075&utm_term=fitmte9xp9od';
 assert.ok(
   isOfficialShopeeAndVoucherRelated(vipAffiliateUrl, 'Back mã gói Shopee VIP'),
   'Phải chấp nhận link banner gói Shopee VIP có tham số affiliate'
@@ -224,7 +224,8 @@ assert.strictEqual(manifest.manifest_version, 3, 'Phải là Manifest V3');
 assert.ok(manifest.permissions.includes('storage'), 'Cần quyền storage');
 assert.ok(manifest.permissions.includes('cookies'), 'Cần quyền cookies');
 assert.ok(manifest.permissions.includes('alarms'), 'Cần quyền alarms');
-assert.ok(manifest.permissions.includes('notifications'), 'Cần quyền notifications');
+assert.ok(manifest.permissions.includes('scripting'), 'Cần quyền scripting');
+assert.ok(!manifest.permissions.includes('notifications'), 'Không dùng quyền notifications sau khi bỏ thông báo ngoài màn hình');
 assert.ok(manifest.host_permissions.includes('*://*.shopee.vn/*'), 'Cần host permission shopee.vn');
 assert.ok(manifest.host_permissions.includes('*://chat.zalo.me/*'), 'Cần host permission chat.zalo.me');
 assert.strictEqual(manifest.action.default_popup, 'popup/popup.html', 'Action popup phải là popup/popup.html');
@@ -242,6 +243,9 @@ assert.ok(fs.existsSync(path.join(ROOT_DIR, 'scripts', 'zalo-content.js')), 'scr
 assert.ok(fs.existsSync(path.join(ROOT_DIR, 'scripts', 'content.js')), 'scripts/content.js phải tồn tại');
 assert.ok(fs.existsSync(path.join(ROOT_DIR, 'popup', 'popup.html')), 'popup/popup.html phải tồn tại');
 assert.ok(fs.existsSync(path.join(ROOT_DIR, 'dashboard', 'dashboard.html')), 'dashboard/dashboard.html phải tồn tại');
+const dashHtmlCheck = fs.readFileSync(path.join(ROOT_DIR, 'dashboard', 'dashboard.html'), 'utf8');
+assert.ok(dashHtmlCheck.includes('src="../assets/icon48.png"'), 'dashboard/dashboard.html phải trỏ logo đúng về ../assets/icon48.png');
+assert.ok(dashHtmlCheck.includes('https://shopee.vn/user/voucher-wallet'), 'dashboard/dashboard.html phải có link ví lưu voucher https://shopee.vn/user/voucher-wallet');
 console.log('✓ Toàn bộ Scripts & Icon chuẩn bị đầy đủ!');
 
 // 7. Test Background Tab Management Safety (No Pinned Shopee Tabs & Auto-Close)

@@ -58,7 +58,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   };
 
   btnOpenDashboard.addEventListener('click', () => openDashboard());
-  btnViewWallet.addEventListener('click', () => openDashboard('tab-wallet'));
+  btnViewWallet.addEventListener('click', () => {
+    chrome.tabs.create({ url: 'https://shopee.vn/user/voucher-wallet' });
+  });
   btnOpenScheduler.addEventListener('click', () => openDashboard('tab-scheduler'));
 
   // Initialize Login Check & Server Time
@@ -126,22 +128,37 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (msg.type === 'BATCH_COMPLETED') {
       progressBarFill.style.width = '100%';
-      progressStatusText.textContent = `Hoàn thành! Thành công: ${msg.summary.successCount}/${msg.summary.total}`;
+      const alreadyCount = msg.summary.alreadySavedCount || 0;
+      const newlySaved = Math.max(0, (msg.summary.successCount || 0) - alreadyCount);
+      const parts = [];
+      if (newlySaved > 0) parts.push(`${newlySaved} lưu mới`);
+      if (alreadyCount > 0) parts.push(`${alreadyCount} đã có trong ví`);
+      if (msg.summary.failCount > 0) parts.push(`${msg.summary.failCount} thất bại`);
+      progressStatusText.textContent = `Hoàn thành (${msg.summary.total} mã): ${parts.join(', ') || '0 thành công'}`;
       startBatchBtn.disabled = false;
     }
   });
 
+  function escapeHtml(str) {
+    return String(str || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
   function appendResultItem(res) {
+    const isAlreadySaved = Boolean(res.alreadySaved) || res.status === 'already_saved';
+    const statusClass = isAlreadySaved ? 'info' : (res.success ? 'success' : 'failed');
+    const statusLabel = isAlreadySaved ? 'Đã có trong ví' : (res.success ? 'Thành công' : 'Thất bại');
     const item = document.createElement('div');
     item.className = 'res-item';
-    item.style.flexDirection = 'column';
-    item.style.alignItems = 'flex-start';
     item.innerHTML = `
-      <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
-        <span class="res-code">${res.code}</span>
-        <span class="res-badge ${res.success ? 'success' : 'failed'}">${res.success ? 'Thành công' : 'Thất bại'}</span>
+      <div class="res-item-top">
+        <span class="res-code">${escapeHtml(res.code)}</span>
+        <span class="res-badge ${statusClass}">${statusLabel}</span>
       </div>
-      ${res.message ? `<div style="font-size:11px; color:${res.success ? '#10B981' : '#EF4444'}; margin-top:4px; line-height:1.3;">${res.message}</div>` : ''}
+      ${res.message ? `<div class="res-msg ${statusClass}">${escapeHtml(res.message)}</div>` : ''}
     `;
     resultsList.prepend(item);
   }
@@ -204,8 +221,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   function showPageMsg(text, isError = false) {
     pageActionMsg.textContent = text;
-    pageActionMsg.classList.remove('hidden');
-    pageActionMsg.style.borderColor = isError ? '#EF4444' : '#EE4D2D';
+    pageActionMsg.className = `action-alert ${isError ? 'error' : 'success'}`;
   }
 
   // Auth & Clock Init

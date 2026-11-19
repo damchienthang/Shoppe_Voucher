@@ -5,6 +5,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Shopee Voucher Auto-Saver - Bảng Điều Khiển</title>
+  <meta name="description" content="Tự động lưu mã giảm giá Shopee hàng loạt, bắt tin nhắn nhóm Zalo, canh mã back banner và hẹn giờ săn sale 0h.">
+  <link rel="icon" type="image/png" href="../assets/icon48.png">
   <script>
     try {
       const savedTheme = localStorage.getItem('dashboardTheme');
@@ -56,15 +58,15 @@
           <!-- User Profile Box (Framed) -->
           <div class="user-profile-box">
             <div class="avatar-wrap">
-              <img id="user-avatar-img" src="assets/icon48.png" alt="Avatar" class="user-avatar">
+              <img id="user-avatar-img" src="../assets/icon48.png" alt="Logo Shopee Voucher" class="user-avatar">
               <span id="user-online-dot" class="online-indicator"></span>
             </div>
             <div class="user-info-text">
               <span id="user-display-name" class="user-name">Đang kiểm tra...</span>
               <span id="user-account-id" class="user-sub">Shopee VN</span>
             </div>
-            <a href="https://shopee.vn" target="_blank" class="btn-shopee-link"
-              title="Mở trang chủ Shopee / Đăng nhập">Shopee.vn</a>
+            <a href="https://shopee.vn/user/voucher-wallet" target="_blank" rel="noopener noreferrer" class="btn-shopee-link"
+              title="Mở trang lưu & quản lý Ví Voucher Shopee">Ví Voucher</a>
             <button id="btn-refresh-user" class="btn-refresh-link" title="Tải lại tài khoản">Tải lại</button>
           </div>
         </div>
@@ -330,7 +332,7 @@
                 <div id="zalo-stream-container" class="zalo-stream-list">
                   <div class="empty-feed">
                     <h4>Đang chờ tin nhắn mới từ nhóm Zalo mục tiêu...</h4>
-                    <p>Mở <a href="https://chat.zalo.me" target="_blank" style="color: #EE4D2D;">chat.zalo.me</a> trên
+                    <p>Mở <a href="https://chat.zalo.me" target="_blank" class="accent-link">chat.zalo.me</a> trên
                       trình duyệt. Mọi tin nhắn chứa mã hoặc link Shopee sẽ xuất hiện ngay tại đây!</p>
                   </div>
                 </div>
@@ -447,7 +449,7 @@
                 <div class="banner-intro-box mb-16">
                   <strong>Cơ chế bắt mã back ngẫu nhiên:</strong> Tự động gọi API kiểm tra quota banner mà không cần
                   tải lại trang. Ngay khi có lượt hủy đơn hoặc Shopee nhả mã (từ phút thứ 5 đến phút thứ 30), hệ thống
-                  sẽ lập tức tự động lưu vào ví Shopee của bạn!
+                  sẽ lập tức lưu thẳng vào ví Shopee của bạn và ghi nhật ký trực tiếp tại bảng theo dõi bên cạnh.
                 </div>
 
                 <!-- 1. Link Banner -->
@@ -565,7 +567,7 @@
                   </div>
                   <div class="stat-box success">
                     <span class="stat-label">Đã Săn Được</span>
-                    <span id="bw-stat-saved" class="stat-number" style="color: #10B981;">0</span>
+                    <span id="bw-stat-saved" class="stat-number">0</span>
                   </div>
                 </div>
 
@@ -689,6 +691,7 @@
     </div>
   </div>
 
+  <script type="module" src="../tools/chrome-preview-shim.js"></script>
   <script type="module" src="dashboard.js"></script>
 </body>
 

@@ -20,6 +20,8 @@
   --shopee-text-sub: #999999;
   --shopee-success: #26AA99;
   --shopee-success-bg: #EBF9F7;
+  --shopee-info: #0284C7;
+  --shopee-info-bg: #E0F2FE;
   --shopee-danger: #EE4D2D;
   --shopee-danger-bg: #FFF1F0;
   --shopee-warning: #FF9800;
@@ -261,7 +263,7 @@ body {
 }
 
 .sidebar {
-  width: 220px;
+  width: 244px;
   flex-shrink: 0;
   background: var(--shopee-card);
   border: 1px solid var(--shopee-border);
@@ -279,8 +281,9 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   width: 100%;
-  padding: 12px 18px;
+  padding: 12px 16px;
   background: transparent;
   border: none;
   border-left: 3px solid transparent;
@@ -312,9 +315,11 @@ body {
   color: #FFFFFF;
   font-size: 10px;
   font-weight: 700;
-  padding: 1px 6px;
+  padding: 2px 7px;
   border-radius: 10px;
   text-transform: uppercase;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .banner-intro-box {
@@ -433,6 +438,19 @@ body {
   border: 1px dashed #D1D5DB;
 }
 
+.bw-window-box .sub-label {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.bw-window-box select.form-control,
+.bw-window-box input.form-control {
+  min-width: 185px;
+  padding: 6px 10px;
+  border-radius: 5px;
+  border: 1px solid #D9D9D9;
+}
+
 .sub-label {
   font-size: 12px;
   color: #555555;
@@ -445,7 +463,17 @@ body {
 }
 
 .log-init-msg {
-  color: #6B7280;
+  color: #CBD5E1;
+}
+
+.bw-log-entry {
+  margin-bottom: 4px;
+  word-break: break-word;
+}
+
+.bw-log-time {
+  color: #94A3B8;
+  margin-right: 4px;
 }
 
 .bw-polling-control {
@@ -472,16 +500,18 @@ body {
 }
 
 .bw-logs-container {
-  background: #111827;
-  color: #10B981;
-  font-family: 'Consolas', monospace;
+  background: #0F172A;
+  color: #E2E8F0;
+  border: 1px solid #1E293B;
+  font-family: 'Consolas', 'SFMono-Regular', monospace;
   font-size: 12px;
   line-height: 1.6;
   padding: 12px;
   border-radius: 8px;
   height: 220px;
   overflow-y: auto;
-  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.5);
+  text-align: left;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.45);
 }
 
 .network-card {
@@ -603,12 +633,64 @@ body {
   align-items: start;
 }
 
+.scheduler-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.mb-16 {
+  margin-bottom: 16px;
+}
+
+.stats-overview {
+  display: grid;
+  gap: 12px;
+}
+
+.accent-link {
+  color: var(--shopee-primary);
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.badge-accent {
+  background-color: var(--shopee-primary-light);
+  color: var(--shopee-primary);
+  border-color: var(--shopee-primary-border);
+}
+
+.badge-success {
+  background-color: var(--shopee-success-bg);
+  color: var(--shopee-success);
+  border-color: rgba(38, 170, 153, 0.35);
+}
+
+.badge-secondary {
+  background-color: var(--shopee-card-muted);
+  color: var(--shopee-text-muted);
+  border-color: var(--shopee-border);
+}
+
 @media (max-width: 992px) {
   .app-body {
     padding: 0 12px;
   }
 
-  .grid-2col {
+  .grid-2col,
+  .scheduler-layout {
     grid-template-columns: 1fr;
   }
 }
@@ -956,15 +1038,21 @@ body {
 
 .status-badge {
   display: inline-block;
-  padding: 2px 8px;
+  padding: 3px 8px;
   border-radius: 3px;
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .status-badge.success {
   background-color: var(--shopee-success-bg);
   color: var(--shopee-success);
+}
+
+.status-badge.info {
+  background-color: var(--shopee-info-bg);
+  color: var(--shopee-info);
 }
 
 .status-badge.failed {
@@ -1003,7 +1091,7 @@ body {
   padding: 14px 16px;
 }
 
-.z-info strong {
+.z-info > strong {
   display: block;
   font-size: 13px;
   color: #222222;
@@ -1665,6 +1753,12 @@ input:checked + .slider:before {
   color: #0E6251;
 }
 
+.feed-chip.info {
+  background: #E0F2FE;
+  border-color: #7DD3FC;
+  color: #075985;
+}
+
 .feed-chip.failed {
   background: #FDEDEC;
   border-color: #F5B7B1;
@@ -1747,30 +1841,32 @@ input:checked + .slider:before {
    Palettes: TokyoNight, Catppuccin Mocha, Wonderland, Big Wave, Bauhaus
    ========================================================================== */
 
-/* 1. TokyoNight (folke/tokyonight.nvim palette) */
+/* 1. TokyoNight (folke/tokyonight.nvim palette - AA+ contrast tuned) */
 [data-theme="tokyonight"] {
   --shopee-primary: #7aa2f7;
   --shopee-primary-hover: #7dcfff;
-  --shopee-primary-light: rgba(122, 162, 247, 0.15);
-  --shopee-primary-border: #3b3d57;
+  --shopee-primary-light: rgba(122, 162, 247, 0.16);
+  --shopee-primary-border: #48547a;
   --shopee-header-grad: linear-gradient(135deg, #16161e 0%, #1f2335 100%);
   --shopee-header-bg: #16161e;
   --shopee-bg: #1a1b26;
   --shopee-card: #24283b;
   --shopee-card-muted: #1f2335;
-  --shopee-border: #3b3d57;
-  --shopee-border-light: #2c2e43;
-  --shopee-text: #c0caf5;
-  --shopee-text-muted: #a9b1d6;
-  --shopee-text-sub: #565f89;
+  --shopee-border: #3d4466;
+  --shopee-border-light: #2f354d;
+  --shopee-text: #dce3ff;
+  --shopee-text-muted: #b8c2e8;
+  --shopee-text-sub: #9aa5ce;
   --shopee-success: #9ece6a;
   --shopee-success-bg: rgba(158, 206, 106, 0.18);
+  --shopee-info: #7dcfff;
+  --shopee-info-bg: rgba(125, 207, 255, 0.16);
   --shopee-danger: #f7768e;
   --shopee-danger-bg: rgba(247, 118, 142, 0.18);
   --shopee-warning: #e0af68;
   --shopee-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
-  --shopee-input-bg: #1f2335;
-  --shopee-input-border: #3b3d57;
+  --shopee-input-bg: #1a1e2e;
+  --shopee-input-border: #444b6a;
   --shopee-btn-text: #0f1423;
 }
 
@@ -1779,52 +1875,56 @@ input:checked + .slider:before {
   --shopee-primary: #cba6f7;
   --shopee-primary-hover: #b4befe;
   --shopee-primary-light: rgba(203, 166, 247, 0.16);
-  --shopee-primary-border: #45475a;
+  --shopee-primary-border: #585b70;
   --shopee-header-grad: linear-gradient(135deg, #11111b 0%, #181825 100%);
   --shopee-header-bg: #181825;
   --shopee-bg: #1e1e2e;
   --shopee-card: #24273a;
   --shopee-card-muted: #181825;
-  --shopee-border: #45475a;
-  --shopee-border-light: #313244;
-  --shopee-text: #cdd6f4;
-  --shopee-text-muted: #bac2de;
-  --shopee-text-sub: #6c7086;
+  --shopee-border: #494d64;
+  --shopee-border-light: #363a4f;
+  --shopee-text: #e2e8ff;
+  --shopee-text-muted: #c6d0f5;
+  --shopee-text-sub: #a5adce;
   --shopee-success: #a6e3a1;
   --shopee-success-bg: rgba(166, 227, 161, 0.18);
+  --shopee-info: #89dceb;
+  --shopee-info-bg: rgba(137, 220, 235, 0.16);
   --shopee-danger: #f38ba8;
   --shopee-danger-bg: rgba(243, 139, 168, 0.18);
   --shopee-warning: #f9e2af;
   --shopee-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
   --shopee-input-bg: #181825;
-  --shopee-input-border: #45475a;
+  --shopee-input-border: #585b70;
   --shopee-btn-text: #11111b;
 }
 
 /* 3. Wonderland Underground (Haruki Murakami) */
 [data-theme="wonderland"] {
-  --shopee-primary: #c39a5f;
-  --shopee-primary-hover: #d8c27a;
-  --shopee-primary-light: rgba(195, 154, 95, 0.16);
-  --shopee-primary-border: #3b3e4f;
+  --shopee-primary: #d8b272;
+  --shopee-primary-hover: #ebd094;
+  --shopee-primary-light: rgba(216, 178, 114, 0.16);
+  --shopee-primary-border: #4a4d61;
   --shopee-header-grad: linear-gradient(135deg, #0c0c11 0%, #1a1b24 100%);
   --shopee-header-bg: #0c0c11;
   --shopee-bg: #121218;
   --shopee-card: #1c1d27;
   --shopee-card-muted: #161720;
-  --shopee-border: #2c2e3b;
-  --shopee-border-light: #232530;
-  --shopee-text: #c6c8d4;
-  --shopee-text-muted: #a3a6b8;
-  --shopee-text-sub: #686c82;
-  --shopee-success: #7c9a74;
-  --shopee-success-bg: rgba(124, 154, 116, 0.18);
-  --shopee-danger: #c25a50;
-  --shopee-danger-bg: rgba(194, 90, 80, 0.18);
-  --shopee-warning: #d8c27a;
+  --shopee-border: #36394a;
+  --shopee-border-light: #292b38;
+  --shopee-text: #e4e6f2;
+  --shopee-text-muted: #bcc0d4;
+  --shopee-text-sub: #9ea3b8;
+  --shopee-success: #9bc18e;
+  --shopee-success-bg: rgba(155, 193, 142, 0.18);
+  --shopee-info: #8ab4f8;
+  --shopee-info-bg: rgba(138, 180, 248, 0.16);
+  --shopee-danger: #e07b72;
+  --shopee-danger-bg: rgba(224, 123, 114, 0.18);
+  --shopee-warning: #ebd094;
   --shopee-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-  --shopee-input-bg: #161720;
-  --shopee-input-border: #2c2e3b;
+  --shopee-input-bg: #15161f;
+  --shopee-input-border: #3d4054;
   --shopee-btn-text: #0e0f14;
 }
 
@@ -1832,57 +1932,81 @@ input:checked + .slider:before {
 [data-theme="bigwave"] {
   --shopee-primary: #38bdf8;
   --shopee-primary-hover: #7dd3fc;
-  --shopee-primary-light: rgba(56, 189, 248, 0.12);
-  --shopee-primary-border: #1e3a5f;
+  --shopee-primary-light: rgba(56, 189, 248, 0.15);
+  --shopee-primary-border: #274c77;
   --shopee-header-grad: linear-gradient(135deg, #070d18 0%, #0f1c33 100%);
   --shopee-header-bg: #09111e;
   --shopee-bg: #09111e;
   --shopee-card: #0f1b2f;
   --shopee-card-muted: #0a1424;
-  --shopee-border: #1e3a5f;
-  --shopee-border-light: #162a45;
-  --shopee-text: #e2e8f0;
-  --shopee-text-muted: #94a3b8;
-  --shopee-text-sub: #64748b;
+  --shopee-border: #23426c;
+  --shopee-border-light: #193152;
+  --shopee-text: #edf2f7;
+  --shopee-text-muted: #b8cae0;
+  --shopee-text-sub: #94aac6;
   --shopee-success: #34d399;
-  --shopee-success-bg: rgba(52, 211, 153, 0.15);
+  --shopee-success-bg: rgba(52, 211, 153, 0.16);
+  --shopee-info: #7dd3fc;
+  --shopee-info-bg: rgba(125, 211, 252, 0.16);
   --shopee-danger: #f87171;
-  --shopee-danger-bg: rgba(248, 113, 113, 0.15);
+  --shopee-danger-bg: rgba(248, 113, 113, 0.18);
   --shopee-warning: #fbbf24;
   --shopee-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
   --shopee-input-bg: #0a1424;
-  --shopee-input-border: #1e3a5f;
+  --shopee-input-border: #274c77;
   --shopee-btn-text: #071527;
 }
 
 /* 5. Bauhaus Weimar */
 [data-theme="bauhaus"] {
-  --shopee-primary: #ff5a4e;
-  --shopee-primary-hover: #6f9dff;
-  --shopee-primary-light: rgba(255, 90, 78, 0.16);
-  --shopee-primary-border: #353535;
+  --shopee-primary: #ff6b5f;
+  --shopee-primary-hover: #ff8a80;
+  --shopee-primary-light: rgba(255, 107, 95, 0.16);
+  --shopee-primary-border: #484848;
   --shopee-header-grad: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
   --shopee-header-bg: #0f0f0f;
   --shopee-bg: #141414;
   --shopee-card: #202020;
   --shopee-card-muted: #181818;
-  --shopee-border: #353535;
-  --shopee-border-light: #282828;
-  --shopee-text: #ece8de;
-  --shopee-text-muted: #c0bbb0;
-  --shopee-text-sub: #757168;
-  --shopee-success: #6cc070;
-  --shopee-success-bg: rgba(108, 192, 112, 0.16);
-  --shopee-danger: #ff5a4e;
-  --shopee-danger-bg: rgba(255, 90, 78, 0.16);
+  --shopee-border: #3d3d3d;
+  --shopee-border-light: #2d2d2d;
+  --shopee-text: #f5f2ea;
+  --shopee-text-muted: #d1ccc1;
+  --shopee-text-sub: #aba69b;
+  --shopee-success: #7bd67f;
+  --shopee-success-bg: rgba(123, 214, 127, 0.18);
+  --shopee-info: #7ab3ff;
+  --shopee-info-bg: rgba(122, 179, 255, 0.16);
+  --shopee-danger: #ff7a70;
+  --shopee-danger-bg: rgba(255, 122, 112, 0.18);
   --shopee-warning: #ffd23f;
   --shopee-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
-  --shopee-input-bg: #181818;
-  --shopee-input-border: #353535;
-  --shopee-btn-text: #ffffff;
+  --shopee-input-bg: #171717;
+  --shopee-input-border: #444444;
+  --shopee-btn-text: #141414;
 }
 
 /* Lamplit Theme Dark Adaptation Overrides */
+[data-theme]:not([data-theme="classic"]) {
+  color-scheme: dark;
+}
+
+[data-theme]:not([data-theme="classic"]) .btn-sync {
+  background: var(--shopee-primary) !important;
+  color: var(--shopee-btn-text, #0f1423) !important;
+}
+
+[data-theme]:not([data-theme="classic"]) .btn-sync:hover {
+  background: var(--shopee-primary-hover) !important;
+}
+
+[data-theme]:not([data-theme="classic"]) .btn-shopee-link:hover,
+[data-theme]:not([data-theme="classic"]) .btn-refresh-link:hover {
+  background: var(--shopee-primary) !important;
+  border-color: var(--shopee-primary) !important;
+  color: var(--shopee-btn-text, #0f1423) !important;
+}
+
 [data-theme]:not([data-theme="classic"]) .panel-card,
 [data-theme]:not([data-theme="classic"]) .sidebar,
 [data-theme]:not([data-theme="classic"]) .bw-mode-card,
@@ -1891,10 +2015,15 @@ input:checked + .slider:before {
 [data-theme]:not([data-theme="classic"]) .wallet-header-card,
 [data-theme]:not([data-theme="classic"]) .voucher-ticket-card,
 [data-theme]:not([data-theme="classic"]) .digit-box,
-[data-theme]:not([data-theme="classic"]) .zalo-feed-card {
+[data-theme]:not([data-theme="classic"]) .zalo-feed-card,
+[data-theme]:not([data-theme="classic"]) .zalo-msg-card {
   background-color: var(--shopee-card) !important;
   border-color: var(--shopee-border) !important;
   color: var(--shopee-text) !important;
+}
+
+[data-theme]:not([data-theme="classic"]) .zalo-msg-card:hover {
+  border-color: var(--shopee-primary) !important;
 }
 
 [data-theme]:not([data-theme="classic"]) .stat-box,
@@ -1902,10 +2031,25 @@ input:checked + .slider:before {
 [data-theme]:not([data-theme="classic"]) .bw-polling-group,
 [data-theme]:not([data-theme="classic"]) .banner-url-panel,
 [data-theme]:not([data-theme="classic"]) .zalo-feed-body,
-[data-theme]:not([data-theme="classic"]) .schedule-status-box {
-  background-color: var(--shopee-card-muted) !important;
+[data-theme]:not([data-theme="classic"]) .zalo-msg-text,
+[data-theme]:not([data-theme="classic"]) .feed-framed-box,
+[data-theme]:not([data-theme="classic"]) .empty-feed,
+[data-theme]:not([data-theme="classic"]) .schedule-status-box,
+[data-theme]:not([data-theme="classic"]) .countdown-target-badge,
+[data-theme]:not([data-theme="classic"]) .network-card {
+  background: var(--shopee-card-muted) !important;
   border-color: var(--shopee-border) !important;
   color: var(--shopee-text) !important;
+}
+
+[data-theme]:not([data-theme="classic"]) .stat-box.success {
+  background: var(--shopee-success-bg) !important;
+  border-color: var(--shopee-success) !important;
+}
+
+[data-theme]:not([data-theme="classic"]) .stat-box.failed {
+  background: var(--shopee-danger-bg) !important;
+  border-color: var(--shopee-danger) !important;
 }
 
 [data-theme]:not([data-theme="classic"]) .banner-url-panel > label {
@@ -1944,11 +2088,22 @@ input:checked + .slider:before {
 [data-theme]:not([data-theme="classic"]) .setting-info label,
 [data-theme]:not([data-theme="classic"]) .bw-polling-label label,
 [data-theme]:not([data-theme="classic"]) .zalo-group-name,
+[data-theme]:not([data-theme="classic"]) .zalo-msg-sender,
 [data-theme]:not([data-theme="classic"]) .v-title,
 [data-theme]:not([data-theme="classic"]) .wallet-intro h3,
 [data-theme]:not([data-theme="classic"]) .empty-feed h4,
-[data-theme]:not([data-theme="classic"]) .zalo-status-banner {
+[data-theme]:not([data-theme="classic"]) .network-card h4,
+[data-theme]:not([data-theme="classic"]) .zalo-status-banner,
+[data-theme]:not([data-theme="classic"]) #bot-status-text {
   color: var(--shopee-text) !important;
+}
+
+[data-theme]:not([data-theme="classic"]) .stat-box.success .stat-number {
+  color: var(--shopee-success) !important;
+}
+
+[data-theme]:not([data-theme="classic"]) .stat-box.failed .stat-number {
+  color: var(--shopee-danger) !important;
 }
 
 [data-theme]:not([data-theme="classic"]) .content-header p,
@@ -1959,12 +2114,91 @@ input:checked + .slider:before {
 [data-theme]:not([data-theme="classic"]) .mode-desc,
 [data-theme]:not([data-theme="classic"]) .sub-label,
 [data-theme]:not([data-theme="classic"]) .bw-polling-label span,
-[data-theme]:not([data-theme="classic"]) .log-init-msg,
+[data-theme]:not([data-theme="classic"]) .bw-polling-note,
+[data-theme]:not([data-theme="classic"]) .help-text,
 [data-theme]:not([data-theme="classic"]) .network-card p,
+[data-theme]:not([data-theme="classic"]) .network-meta,
 [data-theme]:not([data-theme="classic"]) .empty-feed p,
+[data-theme]:not([data-theme="classic"]) .zalo-msg-time,
+[data-theme]:not([data-theme="classic"]) .feed-box-label,
+[data-theme]:not([data-theme="classic"]) .digit-box .label,
 [data-theme]:not([data-theme="classic"]) .v-min-spend,
 [data-theme]:not([data-theme="classic"]) .v-ticket-footer {
   color: var(--shopee-text-muted) !important;
+}
+
+[data-theme]:not([data-theme="classic"]) .bw-logs-container .log-init-msg {
+  color: #CBD5E1 !important;
+}
+
+[data-theme]:not([data-theme="classic"]) .zalo-status-banner code {
+  background: var(--shopee-card) !important;
+  color: var(--shopee-primary) !important;
+  padding: 1px 6px;
+  border-radius: 3px;
+  border: 1px solid var(--shopee-border);
+}
+
+[data-theme]:not([data-theme="classic"]) .zalo-group-pill {
+  background: var(--shopee-primary-light) !important;
+  color: var(--shopee-primary) !important;
+  border-color: var(--shopee-primary-border) !important;
+}
+
+[data-theme]:not([data-theme="classic"]) .feed-chip.success {
+  background: var(--shopee-success-bg) !important;
+  border-color: var(--shopee-success) !important;
+  color: var(--shopee-success) !important;
+}
+
+[data-theme]:not([data-theme="classic"]) .feed-chip.info {
+  background: var(--shopee-info-bg) !important;
+  border-color: var(--shopee-info) !important;
+  color: var(--shopee-info) !important;
+}
+
+[data-theme]:not([data-theme="classic"]) .feed-chip.failed {
+  background: var(--shopee-danger-bg) !important;
+  border-color: var(--shopee-danger) !important;
+  color: var(--shopee-danger) !important;
+}
+
+[data-theme]:not([data-theme="classic"]) .feed-chip.pending {
+  background: rgba(224, 175, 104, 0.16) !important;
+  border-color: var(--shopee-warning) !important;
+  color: var(--shopee-warning) !important;
+}
+
+[data-theme]:not([data-theme="classic"]) .feed-link-chip {
+  background: var(--shopee-primary-light) !important;
+  border-color: var(--shopee-primary-border) !important;
+  color: var(--shopee-primary) !important;
+}
+
+[data-theme]:not([data-theme="classic"]) .feed-link-chip:hover {
+  background: var(--shopee-primary) !important;
+  border-color: var(--shopee-primary) !important;
+  color: var(--shopee-btn-text, #0f1423) !important;
+}
+
+[data-theme]:not([data-theme="classic"]) .digit-box.ms-box {
+  border-color: var(--shopee-warning) !important;
+}
+
+[data-theme]:not([data-theme="classic"]) .digit-box.ms-box .digit {
+  color: var(--shopee-warning) !important;
+}
+
+[data-theme]:not([data-theme="classic"]) .slider {
+  background-color: var(--shopee-border) !important;
+}
+
+[data-theme]:not([data-theme="classic"]) input:checked + .slider {
+  background-color: var(--shopee-primary) !important;
+}
+
+[data-theme]:not([data-theme="classic"]) .btn-text.text-danger {
+  color: var(--shopee-danger) !important;
 }
 
 [data-theme]:not([data-theme="classic"]) .slider-value {
@@ -2002,10 +2236,12 @@ input:checked + .slider:before {
 
 [data-theme]:not([data-theme="classic"]) .form-control,
 [data-theme]:not([data-theme="classic"]) .select-box,
+[data-theme]:not([data-theme="classic"]) .input-datetime,
 [data-theme]:not([data-theme="classic"]) textarea,
 [data-theme]:not([data-theme="classic"]) input[type="text"],
 [data-theme]:not([data-theme="classic"]) input[type="number"],
 [data-theme]:not([data-theme="classic"]) input[type="time"],
+[data-theme]:not([data-theme="classic"]) input[type="datetime-local"],
 [data-theme]:not([data-theme="classic"]) .banner-url-row,
 [data-theme]:not([data-theme="classic"]) .bw-polling-control .form-control {
   background-color: var(--shopee-input-bg) !important;
@@ -2013,11 +2249,18 @@ input:checked + .slider:before {
   color: var(--shopee-text) !important;
 }
 
+[data-theme]:not([data-theme="classic"]) select option {
+  background-color: var(--shopee-card) !important;
+  color: var(--shopee-text) !important;
+}
+
 [data-theme]:not([data-theme="classic"]) .banner-url-row .form-control {
   background: transparent !important;
+  border: none !important;
 }
 
 [data-theme]:not([data-theme="classic"]) .form-control:focus,
+[data-theme]:not([data-theme="classic"]) .input-datetime:focus,
 [data-theme]:not([data-theme="classic"]) textarea:focus,
 [data-theme]:not([data-theme="classic"]) input:focus,
 [data-theme]:not([data-theme="classic"]) .select-box:focus {
@@ -2026,6 +2269,7 @@ input:checked + .slider:before {
 }
 
 [data-theme]:not([data-theme="classic"]) .form-control::placeholder,
+[data-theme]:not([data-theme="classic"]) .input-datetime::placeholder,
 [data-theme]:not([data-theme="classic"]) textarea::placeholder {
   color: var(--shopee-text-sub) !important;
 }
@@ -2114,7 +2358,7 @@ input:checked + .slider:before {
 [data-theme]:not([data-theme="classic"]) .log-container,
 [data-theme]:not([data-theme="classic"]) #bw-realtime-logs,
 [data-theme]:not([data-theme="classic"]) .zalo-stream-list {
-  background-color: var(--shopee-card-muted) !important;
+  background-color: transparent !important;
   border-color: var(--shopee-border) !important;
 }
 

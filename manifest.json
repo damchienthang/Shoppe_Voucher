@@ -10,7 +10,6 @@
     "tabs",
     "activeTab",
     "scripting",
-    "notifications",
     "declarativeNetRequest"
   ],
   "host_permissions": [
