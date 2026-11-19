@@ -431,6 +431,15 @@ body {
   color: var(--shopee-text-muted);
 }
 
+.bw-polling-control {
+  flex: 0 0 auto;
+  min-width: 190px;
+}
+
+.bw-polling-control .form-control {
+  width: 100%;
+}
+
 .bw-window-box {
   background: #F9FAFB;
   padding: 12px;
@@ -1071,8 +1080,8 @@ body {
    ========================================================================== */
 .zalo-toggles-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
 }
 
 @media (max-width: 900px) {
@@ -1085,10 +1094,17 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 14px;
   background: #FAFAFA;
   border: 1px solid var(--shopee-border-light);
   border-radius: var(--shopee-radius);
   padding: 14px 16px;
+}
+
+.z-delay-select {
+  width: auto;
+  min-width: 195px;
+  flex-shrink: 0;
 }
 
 .z-info > strong {
@@ -1569,15 +1585,20 @@ input:checked + .slider:before {
 .settings-group {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 2px;
 }
 
 .setting-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 0;
+  gap: 16px;
+  padding: 14px 0;
   border-bottom: 1px solid var(--shopee-border-light);
+}
+
+.setting-item:last-child {
+  border-bottom: none;
 }
 
 .setting-info label {
@@ -1585,7 +1606,7 @@ input:checked + .slider:before {
   font-size: 14px;
   font-weight: 600;
   color: #222222;
-  margin-bottom: 2px;
+  margin-bottom: 0;
 }
 
 .setting-info p {
@@ -1604,6 +1625,10 @@ input:checked + .slider:before {
 
 .select-box:focus {
   border-color: var(--shopee-primary);
+}
+
+.setting-control .select-box {
+  min-width: 185px;
 }
 
 .text-success {
@@ -2407,3 +2432,571 @@ input:checked + .slider:before {
   font-size: 13px;
   padding: 6px;
 }
+
+/* ==========================================================================
+   Zalo Slow Sequential Voucher Queue Panel
+   ========================================================================== */
+.zq-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.zq-active-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--shopee-border);
+  background: var(--shopee-card-muted, #FAFAFA);
+  color: var(--shopee-text);
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+.zq-active-banner.running {
+  border-color: var(--shopee-primary);
+  background: var(--shopee-primary-light);
+}
+
+.zq-active-banner.paused {
+  border-color: var(--shopee-warning, #F59E0B);
+}
+
+.zq-status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--shopee-text-sub, #888888);
+}
+
+.zq-active-banner.running .zq-status-dot {
+  background: var(--shopee-success, #26AA99);
+  box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.25);
+}
+
+.zq-active-banner.paused .zq-status-dot {
+  background: var(--shopee-warning, #F59E0B);
+}
+
+.zq-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.zq-col {
+  border: 1px solid var(--shopee-border);
+  border-radius: 6px;
+  background: var(--shopee-card-muted, #FAFAFA);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.zq-col-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--shopee-text);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--shopee-border-light, #EEEEEE);
+}
+
+.zq-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.zq-empty {
+  font-size: 13px;
+  color: var(--shopee-text-muted);
+  padding: 14px 8px;
+  text-align: center;
+}
+
+.zq-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 5px;
+  border: 1px solid var(--shopee-border-light, #EAEAEA);
+  background: var(--shopee-card, #FFFFFF);
+}
+
+.zq-row.processed {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.zq-row-top,
+.zq-row-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.zq-row-top {
+  justify-content: space-between;
+}
+
+.zq-idx {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--shopee-text-sub);
+}
+
+.zq-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--shopee-text);
+}
+
+.zq-tag {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.zq-tag.new {
+  background: var(--shopee-info-bg, #E0F2FE);
+  color: var(--shopee-info, #0369A1);
+  border: 1px solid var(--shopee-info, #0284C7);
+}
+
+.zq-tag.reset {
+  background: rgba(245, 158, 11, 0.16);
+  color: var(--shopee-warning, #B45309);
+  border: 1px solid var(--shopee-warning, #D97706);
+}
+
+.zq-time {
+  font-size: 12px;
+  color: var(--shopee-text-muted);
+  white-space: nowrap;
+}
+
+.zq-row-msg {
+  font-size: 12px;
+  color: var(--shopee-text-muted);
+  line-height: 1.4;
+}
+
+@media (max-width: 900px) {
+  .zq-stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .zq-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ==========================================================================
+   VauS Visual Craft: Signature Branded Backdrop, Borders & Motion
+   ========================================================================== */
+body {
+  position: relative;
+  background-image:
+    repeating-linear-gradient(
+      -45deg,
+      rgba(238, 77, 45, 0.018) 0px,
+      rgba(238, 77, 45, 0.018) 1px,
+      transparent 1px,
+      transparent 28px
+    ),
+    radial-gradient(rgba(0, 0, 0, 0.04) 1px, transparent 1px);
+  background-size: auto, 24px 24px;
+}
+
+[data-theme]:not([data-theme="classic"]) body {
+  background-image:
+    repeating-linear-gradient(
+      -45deg,
+      rgba(255, 255, 255, 0.018) 0px,
+      rgba(255, 255, 255, 0.018) 1px,
+      transparent 1px,
+      transparent 30px
+    ),
+    radial-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: auto, 24px 24px;
+}
+
+.vaus-bg-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  contain: strict;
+  color: var(--shopee-primary);
+  opacity: 1;
+}
+
+[data-theme="classic"] .vaus-bg-canvas {
+  opacity: 0.9;
+}
+
+.vaus-bg-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.vaus-bg-ring-layer {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(700px, 78vmin);
+  height: min(700px, 78vmin);
+  margin-left: calc(min(700px, 78vmin) * -0.5);
+  margin-top: calc(min(700px, 78vmin) * -0.5);
+  display: block;
+  will-change: transform;
+}
+
+.vaus-bg-orbit {
+  transform-origin: center center;
+  animation: vausRingSpin 44s linear infinite;
+}
+
+.vaus-bg-orbit.reverse {
+  animation-direction: reverse;
+  animation-duration: 58s;
+}
+
+.app-layout {
+  position: relative;
+  z-index: 1;
+}
+
+/* Subtle translucent surface so centered bold VauS emblem shines cleanly behind cards */
+.panel-card,
+.sidebar {
+  background-color: color-mix(in srgb, var(--shopee-card) 86%, transparent);
+}
+
+[data-theme]:not([data-theme="classic"]) .panel-card,
+[data-theme]:not([data-theme="classic"]) .sidebar {
+  background-color: color-mix(in srgb, var(--shopee-card) 78%, transparent) !important;
+}
+
+/* Subtle top header bottom accent hairline */
+.shopee-top-header::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1.5px;
+  background: linear-gradient(90deg, transparent 5%, rgba(255, 255, 255, 0.55) 50%, transparent 95%);
+  pointer-events: none;
+}
+
+/* Animated VauS Brand Emblem (GPU transform-only) */
+.vaus-brand-lockup {
+  gap: 10px;
+}
+
+.vaus-brand-emblem {
+  color: #FFFFFF;
+  flex-shrink: 0;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.2));
+}
+
+.vaus-emblem-orbit {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: vausRingSpin 6s linear infinite;
+}
+
+.vaus-emblem-spark {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: vausSparkPulse 2.8s ease-in-out infinite;
+}
+
+@keyframes vausSparkPulse {
+  0%, 100% { opacity: 0.55; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.25); }
+}
+
+/* Architectural Panel Card Frame & Corner Accents */
+.panel-card {
+  position: relative;
+  border-radius: 10px;
+  overflow: hidden;
+  transition: border-color 0.22s ease, box-shadow 0.22s ease;
+}
+
+.panel-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 16px;
+  right: 16px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--shopee-primary), transparent);
+  opacity: 0.34;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+
+.panel-card:hover::before {
+  opacity: 0.8;
+}
+
+.panel-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--shopee-primary), var(--shopee-primary)) top left / 14px 1.5px no-repeat,
+    linear-gradient(var(--shopee-primary), var(--shopee-primary)) top left / 1.5px 14px no-repeat,
+    linear-gradient(var(--shopee-primary), var(--shopee-primary)) bottom right / 14px 1.5px no-repeat,
+    linear-gradient(var(--shopee-primary), var(--shopee-primary)) bottom right / 1.5px 14px no-repeat;
+  opacity: 0.42;
+  transition: opacity 0.25s ease;
+}
+
+.panel-card:hover::after {
+  opacity: 0.9;
+}
+
+/* Smooth Tab Reveal Motion */
+.tab-panel.active {
+  animation: vausTabReveal 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes vausTabReveal {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Sidebar & Stat Micro-Craft */
+.sidebar {
+  border-radius: 10px;
+}
+
+.nav-item {
+  position: relative;
+  transition: background-color 0.18s ease, color 0.18s ease;
+}
+
+.stat-box {
+  position: relative;
+  border-radius: 8px;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.stat-box:hover {
+  transform: translateY(-1px);
+  border-color: var(--shopee-primary);
+}
+
+.stat-number,
+.digit,
+.time-value,
+.ms-value {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ==========================================================================
+   Settings 2-Column Layout, Animated Vector Showcase & Changelog
+   ========================================================================== */
+.settings-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.vaus-version-meta {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--shopee-text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.vaus-hero-graphic {
+  position: relative;
+  border: 1px solid var(--shopee-border);
+  border-radius: 8px;
+  background: var(--shopee-card-muted, #FAFAFA);
+  padding: 12px 14px 10px;
+  margin-bottom: 18px;
+  overflow: hidden;
+}
+
+.vaus-orbital-svg {
+  display: block;
+  width: 100%;
+  height: 112px;
+  color: var(--shopee-primary);
+}
+
+.vaus-center-core {
+  fill: var(--shopee-card, #FFFFFF);
+}
+
+.vaus-center-ring {
+  transform-origin: 210px 60px;
+  animation: vausRingSpin 16s linear infinite;
+}
+
+.vaus-center-ring.reverse {
+  animation-direction: reverse;
+  animation-duration: 24s;
+}
+
+.vaus-node-ping {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: vausNodePulse 3s ease-in-out infinite;
+}
+
+.vaus-node-ping.delay {
+  animation-delay: 1.5s;
+}
+
+@keyframes vausRingSpin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes vausNodePulse {
+  0%, 100% { opacity: 0.2; transform: scale(0.9); }
+  50% { opacity: 0.7; transform: scale(1.25); }
+}
+
+.vaus-hero-caption {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--shopee-border-light, #EAEAEA);
+}
+
+.vaus-hero-caption strong {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.2px;
+  color: var(--shopee-text);
+}
+
+.vaus-hero-caption span {
+  font-size: 12px;
+  color: var(--shopee-text-muted);
+}
+
+.vaus-section-heading {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--shopee-text-muted);
+  margin-bottom: 12px;
+}
+
+.vaus-changelog-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.vaus-changelog-item {
+  position: relative;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--shopee-border);
+  background: var(--shopee-card-muted, #FAFAFA);
+}
+
+.vaus-changelog-item.latest {
+  border-color: var(--shopee-primary);
+}
+
+.vaus-cl-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.vaus-cl-ver {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--shopee-primary);
+}
+
+.vaus-cl-date {
+  font-size: 12px;
+  color: var(--shopee-text-muted);
+}
+
+.vaus-cl-points {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.vaus-cl-points li {
+  position: relative;
+  padding-left: 14px;
+  font-size: 13px;
+  color: var(--shopee-text);
+  line-height: 1.45;
+}
+
+.vaus-cl-points li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--shopee-primary);
+  opacity: 0.75;
+}
+
+@media (max-width: 960px) {
+  .settings-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vaus-emblem-orbit,
+  .vaus-emblem-spark,
+  .vaus-center-ring,
+  .vaus-node-ping,
+  .vaus-bg-orbit,
+  .tab-panel.active {
+    animation: none !important;
+  }
+}
+
+

@@ -3,7 +3,8 @@
   "minCodeLength": 5,
   "rejectSpecialChars": true,
   "autoClaimCodes": true,
-  "autoClaimLinks": true,
+  "autoClaimLinks": false,
+  "queueDelayMs": 6000,
   "shopeeCookies": {
     "SPC_EC": "",
     "SPC_U": "",

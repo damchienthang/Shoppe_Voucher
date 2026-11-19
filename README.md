@@ -1,4 +1,4 @@
-# Shopee Voucher Auto-Saver
+# VauS
 
 ![Manifest V3](https://img.shields.io/badge/Chrome%20Extension-Manifest%20V3-EE4D2D?style=flat-square&logo=googlechrome&logoColor=white)
 ![Node.js](https://img.shields.io/badge/Node.js-%3E%3D18-339933?style=flat-square&logo=nodedotjs&logoColor=white)
@@ -23,10 +23,12 @@ Dự án được thiết kế tinh gọn, tập trung hoàn toàn vào độ ch
   - **Thất bại**: Hiển thị đúng lý do tiếng Việt từ Shopee (hết lượt, chưa đến khung giờ, không hợp lệ, không đủ điều kiện...).
 - Hỗ trợ lọc nhanh kết quả và xuất báo cáo **CSV (UTF-8)**.
 
-### 2. Zalo Web Auto-Sniffer & Bot Nền 24/7
-- **Chế độ Extension trên Zalo Web (`chat.zalo.me`)**: Theo dõi thời gian thực tin nhắn từ nhóm mục tiêu (mặc định `[23] LONGHOUSEE`), tự động trích xuất mã voucher hoặc mở tab nền xử lý link rút gọn Shopee (`s.shopee.vn`, `shp.ee`, `shopee.vn`) rồi đóng tab an toàn.
-- **Bộ lọc tên miền nghiêm ngặt**: Tự động loại bỏ link ngoài hệ sinh thái Shopee và tin nhắn rác.
-- **Chế độ Bot Daemon Node.js (`bot/bot.js`)**: Chạy độc lập 24/7 bằng `puppeteer-core`, đồng bộ trạng thái và luồng tin trực tiếp về Dashboard qua API nội bộ (`127.0.0.1:23232`).
+### 2. Zalo Web Auto-Sniffer & Hàng Đợi Lưu Chậm (Bot Nền 24/7)
+- **Chỉ bắt tin nhắn mới đến**: Khi bạn mở Zalo Web (`chat.zalo.me`) hoặc chuyển vào nhóm mục tiêu (mặc định `[23] LONGHOUSEE`), toàn bộ lịch sử tin nhắn cũ và tin nhắn khi cuộn ngược lên xem lại đều tự động bỏ qua.
+- **Hàng đợi tuần tự lưu thật chậm (Slow Queue)**: Phù hợp với các nhóm săn voucher mật độ tin nhắn cực lớn — mọi mã bắt được đưa vào một danh sách chung và lưu **từng mã một** với nhịp nghỉ dài (mặc định **6s – 8.5s/mã**, tùy chỉnh đến 14.5s) để hạn chế tối đa quét bot.
+- **Chỉ bắt mã mới hoặc mã đã reset**: Tự động ghi nhớ mã đã gặp để lọc bỏ tin spam trùng lặp; chỉ nạp lại vào hàng đợi khi sang khung giờ reset mới của Shopee (`0h, 9h, 12h, 15h, 18h, 21h`) hoặc có tín hiệu reset/mở lại rõ ràng.
+- **Không đuổi theo link back voucher**: Bỏ qua các tin nhắn chỉ chứa link back voucher và chỉ tập trung xử lý mã voucher ký tự.
+- **Chế độ Bot Daemon Node.js (`bot/bot.js`)**: Dùng chung lõi hàng đợi lưu chậm, chạy độc lập 24/7 bằng `puppeteer-core` và đồng bộ qua API nội bộ (`127.0.0.1:23232`).
 
 ### 3. Canh Mã Back Banner (Realtime API Watcher)
 - Hỗ trợ 2 chế độ săn mã back tự động từ các trang chiến dịch Shopee (ví dụ `shopee.vn/m/goi-ShopeeVIP`):
@@ -121,14 +123,16 @@ ShoppeVoucher/
 │   └── zalo-content.js         # Theo dõi tin nhắn thời gian thực trên Zalo Web
 ├── tests/                      # Bộ kiểm thử tự động
 │   ├── test_suite.js           # 13 kiểm thử parser, bộ lọc link/nhóm, manifest & cơ chế tab
-│   └── voucher-result.test.js  # Unit test chuẩn hóa & phân loại phản hồi lưu mã Shopee
+│   ├── voucher-result.test.js  # Unit test chuẩn hóa & phân loại phản hồi lưu mã Shopee
+│   └── voucher-queue.test.js   # Unit test hàng đợi lưu chậm, lọc trùng & nhận diện mã reset
 ├── tools/                      # Công cụ hỗ trợ phát triển & xem trước
 │   ├── server.js               # Dev server xem trước Dashboard & Popup trên localhost:3000
 │   ├── chrome-preview-shim.js  # Lớp tương thích Chrome API cho môi trường preview
 │   └── generate_icons.js       # Trình tạo PNG sắc nét (supersampling 4x4)
 ├── utils/                      # Thư viện dùng chung
 │   ├── parser.js               # Smart Parser, dịch mã lỗi & chuẩn hóa kết quả lưu mã
-│   └── shopee-api.js           # Tương tác API Shopee (giả lập nguồn Mobile App & Web)
+│   ├── shopee-api.js           # Tương tác API Shopee (giả lập nguồn Mobile App & Web)
+│   └── voucher-queue.js        # Hàng đợi lưu chậm tuần tự & bộ nhận diện mã mới / mã reset
 ├── background.js               # Service Worker trung tâm (Manifest V3)
 ├── manifest.json               # Khai báo quyền và cấu trúc Chrome Extension
 ├── package.json                # Cấu hình dự án và npm scripts

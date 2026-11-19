@@ -6,9 +6,9 @@
   "scripts": {
     "dev": "node tools/server.js",
     "start": "node tools/server.js",
-    "build": "node test_suite.js && node --test tests/voucher-result.test.js",
-    "lint": "node --check tools/server.js && node --check background.js && node --check dashboard/dashboard.js && node --check popup/popup.js && node --check tools/chrome-preview-shim.js && node --check tools/generate_icons.js && node --check utils/parser.js && node --check utils/shopee-api.js && node --check bot/bot.js",
-    "test": "node test_suite.js && node --test tests/voucher-result.test.js",
+    "build": "node test_suite.js && node --test tests/voucher-result.test.js tests/voucher-queue.test.js",
+    "lint": "node --check tools/server.js && node --check background.js && node --check dashboard/dashboard.js && node --check popup/popup.js && node --check tools/chrome-preview-shim.js && node --check tools/generate_icons.js && node --check utils/parser.js && node --check utils/shopee-api.js && node --check utils/voucher-queue.js && node --check bot/bot.js",
+    "test": "node test_suite.js && node --test tests/voucher-result.test.js tests/voucher-queue.test.js",
     "icons": "node tools/generate_icons.js",
     "bot": "node bot/bot.js"
   },

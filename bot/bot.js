@@ -16,9 +16,12 @@ import {
   extractVoucherCodes,
   isOfficialShopeeAndVoucherRelated,
   isShopeeMessage,
+  isTargetZaloGroup,
   formatShopeeError,
-  extractShopeeMessage
+  extractShopeeMessage,
+  normalizeSaveResult
 } from '../utils/parser.js';
+import { createVoucherQueue } from '../utils/voucher-queue.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -27,7 +30,7 @@ const __dirname = path.dirname(__filename);
 const BOT_DATA_DIR = path.join(__dirname, 'bot_data');
 const SESSION_DIR = path.join(BOT_DATA_DIR, 'zalo_session');
 const CONFIG_FILE = path.join(__dirname, 'bot_config.json');
-const LOGS_FILE = path.join(BOT_DATA_DIR, 'bot_logs.json');
+const SEEN_CODES_FILE = path.join(BOT_DATA_DIR, 'seen_codes.json');
 
 // Ensure directories exist
 if (!fs.existsSync(BOT_DATA_DIR)) {
@@ -40,7 +43,8 @@ let config = {
   minCodeLength: 5,
   rejectSpecialChars: true,
   autoClaimCodes: true,
-  autoClaimLinks: true,
+  autoClaimLinks: false,
+  queueDelayMs: 6000,
   shopeeCookies: {
     SPC_EC: '',
     SPC_U: '',
@@ -173,40 +177,50 @@ async function saveShopeeCode(voucherCode) {
     });
 
     const data = await res.json();
-    if (data.error === 0) {
+    const normalized = normalizeSaveResult(voucherCode, data, 'Bot');
+    if (normalized.success) {
       stats.codesSaved++;
-      log(`Lưu mã thành công: ${voucherCode}`, 'SUCCESS');
-      showWindowsNotification('Shopee Voucher Auto-Saver', `Đã lưu mã ${voucherCode} thành công vào ví!`);
-      return {
-        success: true,
-        code: voucherCode,
-        errCode: 0,
-        message: 'Lưu thành công vào ví!',
-        voucherData: data.data
-      };
+      log(`Lưu mã [${voucherCode}] (${normalized.status}): ${normalized.message}`, 'SUCCESS');
     } else {
-      const rawShopeeMsg = extractShopeeMessage(data);
-      const errMsg = formatShopeeError(data.error, rawShopeeMsg);
-      log(`Không thể lưu mã [${voucherCode}]: ${errMsg}`, 'FAIL');
-      showWindowsNotification('Không Thể Lưu Mã Voucher', `Mã [${voucherCode}]: ${errMsg}`);
-      return {
-        success: false,
-        code: voucherCode,
-        errCode: data.error,
-        message: errMsg,
-        rawShopeeMsg,
-        voucherData: data.data,
-        rawError: data
-      };
+      log(`Không thể lưu mã [${voucherCode}]: ${normalized.message}`, 'FAIL');
     }
+    return normalized;
   } catch (err) {
     log(`Lỗi kết nối Shopee khi lưu [${voucherCode}]: ${err.message}`, 'ERROR');
-    return { success: false, code: voucherCode, errCode: -999, message: err.message };
+    return { success: false, alreadySaved: false, status: 'failed', code: voucherCode, errCode: -999, message: err.message };
   }
 }
 
+function loadSeenCodesMap() {
+  try {
+    if (fs.existsSync(SEEN_CODES_FILE)) {
+      return JSON.parse(fs.readFileSync(SEEN_CODES_FILE, 'utf8'));
+    }
+  } catch (_) {}
+  return {};
+}
+
+const botVoucherQueue = createVoucherQueue({
+  initialSeenMap: loadSeenCodesMap(),
+  getDelayMs: () => Math.max(3000, Number(config.queueDelayMs) || 6000),
+  jitterMs: 2500,
+  resetDebounceMs: 120000,
+  savedResetCooldownMs: 900000,
+  saveFn: async (code) => {
+    log(`Hàng đợi lưu chậm: Đang lưu mã [${code}]...`);
+    return await saveShopeeCode(code);
+  },
+  onPersistSeen: (seenObj) => {
+    try {
+      fs.writeFileSync(SEEN_CODES_FILE, JSON.stringify(seenObj, null, 2), 'utf8');
+    } catch (_) {}
+  }
+});
+
 /**
- * Handle incoming detected message from Zalo
+ * Handle incoming NEW detected message from Zalo:
+ * - Strictly ignores link-only back-voucher messages.
+ * - Enqueues only NEW or RESET codes into the slow sequential queue.
  */
 async function handleDetectedMessage(payload) {
   if (!isRunning) {
@@ -226,31 +240,25 @@ async function handleDetectedMessage(payload) {
     return;
   }
 
-  stats.messagesDetected++;
-  log(`Nhận tin nhắn từ [${groupName}] (${senderName}): "${text.slice(0, 80)}..."`);
-
-  // Process Codes
-  if (config.autoClaimCodes && codes.length > 0) {
-    for (let i = 0; i < codes.length; i++) {
-      const code = codes[i];
-      log(`Tiến hành lưu mã voucher [${i + 1}/${codes.length}]: ${code}`);
-      await saveShopeeCode(code);
-
-      if (i < codes.length - 1) {
-        const safeDelay = 2500 + Math.floor(Math.random() * 1000); // 2.5s - 3.5s (Tốc độ an toàn chống Shopee quét)
-        log(`Tạm nghỉ an toàn ${safeDelay}ms trước khi lưu mã tiếp theo để chống Shopee quét và bắt kết quả...`);
-        await new Promise(r => setTimeout(r, safeDelay));
-      }
-    }
+  // Skip link-only messages (do not chase back-voucher links)
+  if (!config.autoClaimCodes || !codes || codes.length === 0) {
+    return;
   }
 
-  // Process Links
-  if (config.autoClaimLinks && links.length > 0) {
-    stats.linksDetected += links.length;
-    for (const link of links) {
-      log(`Phát hiện đường link Shopee sự kiện: ${link}`);
-      showWindowsNotification('Sự kiện Shopee từ Zalo', `Link nhận voucher: ${link}`);
-    }
+  const { enqueued, skipped } = botVoucherQueue.enqueueFromMessage({
+    codes,
+    text,
+    groupName,
+    senderName,
+    timestamp: Date.now()
+  });
+
+  if (enqueued.length > 0) {
+    stats.messagesDetected++;
+    const labelList = enqueued.map(i => `${i.code} (${i.triggerLabel})`).join(', ');
+    log(`Tin mới từ [${groupName}] -> Thêm ${enqueued.length} mã vào hàng đợi chậm: ${labelList}`);
+  } else if (skipped.length > 0) {
+    log(`Bỏ qua ${skipped.length} mã cũ/trùng lặp từ [${groupName}].`, 'DEBUG');
   }
 }
 
@@ -426,25 +434,57 @@ async function injectSnifferScript(targetPage) {
         return Array.from(codes);
       }
 
-      function extractLinks(rawText) {
-        const regex = /https?:\/\/(?:[a-zA-Z0-9_-]+\.)*(?:shopee\.vn|shp\.ee|s\.shopee\.vn)[^\s<>"'()]+/gi;
-        return rawText.match(regex) || [];
+      const MSG_SELECTOR = '.chat-message, .msg-view, .chat-item, .card--text';
+      let sessionStartedAt = Date.now();
+      let sessionReadyAt = sessionStartedAt + 2500;
+
+      // Mark all pre-existing messages as baseline so opening Zalo NEVER catches old messages
+      function markBaseline() {
+        sessionStartedAt = Date.now();
+        sessionReadyAt = sessionStartedAt + 2500;
+        document.querySelectorAll(MSG_SELECTOR).forEach(el => {
+          el.setAttribute('data-sv-bot-processed', 'baseline');
+          const t = (el.innerText || el.textContent || '').trim();
+          if (t) processedHashes.add(t.slice(0, 100));
+        });
       }
 
       function processMsg(node) {
+        if (!node || node.hasAttribute('data-sv-bot-processed')) return;
         const text = (node.innerText || node.textContent || '').trim();
         if (!text) return;
 
+        // Ignore anything during initial warmup window or prepended above existing processed nodes
+        if (Date.now() < sessionReadyAt) {
+          node.setAttribute('data-sv-bot-processed', 'baseline');
+          processedHashes.add(text.slice(0, 100));
+          return;
+        }
+        const processed = document.querySelectorAll('[data-sv-bot-processed]');
+        if (processed.length > 0) {
+          const lastEl = processed[processed.length - 1];
+          if (lastEl && lastEl !== node) {
+            const pos = node.compareDocumentPosition(lastEl);
+            if ((pos & Node.DOCUMENT_POSITION_FOLLOWING) && !node.contains(lastEl) && !lastEl.contains(node)) {
+              node.setAttribute('data-sv-bot-processed', 'baseline');
+              processedHashes.add(text.slice(0, 100));
+              return;
+            }
+          }
+        }
+
+        node.setAttribute('data-sv-bot-processed', 'true');
+
         const groupName = getActiveChatName();
         const codes = extractCodes(text);
-        const links = extractLinks(text);
 
-        if (codes.length === 0 && links.length === 0) return;
+        // Only capture NEW messages that actually contain voucher codes (ignore link-only back messages)
+        if (codes.length === 0) return;
 
         const hash = `${text.slice(0, 100)}`;
         if (processedHashes.has(hash)) return;
         processedHashes.add(hash);
-        if (processedHashes.size > 500) {
+        if (processedHashes.size > 600) {
           const first = processedHashes.values().next().value;
           processedHashes.delete(first);
         }
@@ -458,19 +498,21 @@ async function injectSnifferScript(targetPage) {
             senderName,
             text,
             codes,
-            links
+            links: []
           });
         }
       }
+
+      markBaseline();
 
       const observer = new MutationObserver(mutations => {
         for (const m of mutations) {
           if (m.addedNodes) {
             m.addedNodes.forEach(node => {
               if (node.nodeType === Node.ELEMENT_NODE) {
-                const msgs = node.querySelectorAll ? node.querySelectorAll('.chat-message, .msg-view, .chat-item, .card--text') : [];
+                const msgs = node.querySelectorAll ? node.querySelectorAll(MSG_SELECTOR) : [];
                 if (msgs.length > 0) msgs.forEach(processMsg);
-                else if (node.classList?.contains('chat-message') || node.classList?.contains('msg-view')) processMsg(node);
+                else if (node.matches && node.matches(MSG_SELECTOR)) processMsg(node);
               }
             });
           }
@@ -478,7 +520,6 @@ async function injectSnifferScript(targetPage) {
       });
 
       observer.observe(document.body, { childList: true, subtree: true });
-      document.querySelectorAll('.chat-message, .msg-view, .chat-item, .card--text').forEach(processMsg);
     }, config.targetGroup);
 
     log('Đã tích hợp bộ lắng nghe tin nhắn vào Zalo thành công!');
@@ -561,7 +602,7 @@ function startLocalServer() {
         try {
           const { code } = JSON.parse(body);
           if (code) {
-            const saveResult = await saveVoucher(code);
+            const saveResult = await saveShopeeCode(code);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(saveResult));
             return;

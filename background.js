@@ -18,12 +18,15 @@ import {
   isAlreadySavedResult,
   normalizeSaveResult
 } from './utils/parser.js';
+import { createVoucherQueue } from './utils/voucher-queue.js';
 
 // Keep track of active tasks & precise timers
 let activeBatchTask = null;
 let scheduledTimers = new Map();
-const processedZaloLinks = new Map();
 const activeAutoClaimTabs = new Map();
+let zaloQueueDelayMs = 6000;
+let zaloVoucherQueue = null;
+let zaloQueueInitPromise = null;
 
 function getAllShopeeCookies() {
   return new Promise((resolve, reject) => {
@@ -838,130 +841,100 @@ async function appendZaloStream(item) {
 }
 
 /**
- * Auto-claim a Shopee link by opening background tab and executing auto-collect
+ * Update a single voucher's saved result inside stored zaloStream so Dashboard Live Feed reflects live slow-queue progress
  */
-async function autoClaimShopeeLink(rawUrl, groupName) {
-  if (!rawUrl || typeof rawUrl !== 'string') return;
-
-  const now = Date.now();
-  // 60-second duplicate debounce for the exact same URL
-  if (processedZaloLinks.has(rawUrl) && (now - (processedZaloLinks.get(rawUrl) || 0)) < 60000) {
-    console.log(`[Auto-Claim Link] Bỏ qua link vừa xử lý trong 60s: ${rawUrl}`);
-    return;
-  }
-  processedZaloLinks.set(rawUrl, now);
-
-  // Clean old entries (> 10 minutes)
-  if (processedZaloLinks.size > 200) {
-    for (const [u, t] of processedZaloLinks.entries()) {
-      if (now - t > 600000) processedZaloLinks.delete(u);
-    }
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // Zalo Links: Deliberately bypass the 200ms flash-claim loop
-  // to avoid anti-bot flags, run at safe human speed, and ensure
-  // page toasts/popups are properly observed and logged.
-  // ─────────────────────────────────────────────────────────────
-
+async function updateZaloStreamResult(messageId, code, resultObj) {
   try {
-    // 1. Check if URL contains embedded voucher code and save via API immediately
-    const { extractVoucherCodes } = await import('./utils/parser.js');
-    const embeddedCodes = extractVoucherCodes(rawUrl);
-    for (const c of embeddedCodes) {
-      console.log(`[Auto-Claim Link] Tìm thấy mã trong URL: ${c.code}, tiến hành lưu vào ví...`);
-      smartSaveVoucher(c.code).then(async result => {
-        await appendHistory({
-          code: c.code,
-          status: result.alreadySaved ? 'ALREADY_SAVED' : (result.success ? 'SUCCESS' : 'FAILED'),
-          message: result.message,
-          time: new Date().toLocaleTimeString('vi-VN'),
-          date: new Date().toLocaleDateString('vi-VN')
-        });
-      }).catch(error => {
-        console.warn(`[Auto-Claim Link] Lỗi lưu mã ${c.code}:`, error.message);
-      });
+    const { zaloStream = [] } = await chrome.storage.local.get('zaloStream');
+    let modified = false;
+    for (const item of zaloStream) {
+      if (messageId && item.id !== messageId) continue;
+      if (!Array.isArray(item.results)) item.results = [];
+      const existing = item.results.find(r => r.code === code);
+      if (existing) {
+        Object.assign(existing, resultObj);
+        modified = true;
+      } else if (Array.isArray(item.codes) && item.codes.includes(code)) {
+        item.results.push({ code, ...resultObj });
+        modified = true;
+      }
+      if (messageId) break;
     }
-
-    // 2. Append auto-claim markers (both query param and hash so whichever survives redirects will trigger)
-    let targetUrl = rawUrl;
-    try {
-      const urlObj = new URL(rawUrl);
-      urlObj.searchParams.set('sv_autoclaim', '1');
-      urlObj.hash = 'sv_autoclaim=true';
-      targetUrl = urlObj.toString();
-    } catch (e) { }
-
-    const tab = await chrome.tabs.create({
-      url: targetUrl,
-      active: false,
-      pinned: false
-    });
-
-    console.log(`[Zalo Link Auto-Claim] Đã mở tab ngầm cho link mã: ${targetUrl} (Tab #${tab.id})`);
-
-    activeAutoClaimTabs.set(tab.id, {
-      startTime: Date.now(),
-      groupName,
-      rawUrl,
-      tabId: tab.id
-    });
-
-    // 3. Tab listener to trigger auto-claim when redirect & page load complete
-    const tabListener = (tabId, changeInfo, updatedTab) => {
-      if (tabId !== tab.id) return;
-
-      const currentUrl = updatedTab?.url || changeInfo?.url || '';
-
-      // When page status is complete and reached shopee.vn domain
-      if (changeInfo.status === 'complete' && currentUrl.includes('shopee.vn')) {
-        const triggerClaim = () => {
-          chrome.tabs.sendMessage(tab.id, { type: 'START_AUTO_CLAIM', groupName }).catch(() => { });
-          if (chrome.scripting) {
-            chrome.scripting.executeScript({
-              target: { tabId: tab.id },
-              func: () => {
-                window.__SV_AUTOCLAIM_TRIGGERED__ = true;
-                window.dispatchEvent(new CustomEvent('sv-trigger-autoclaim'));
-              }
-            }).catch(() => { });
-          }
-        };
-
-        // Multiple attempts to handle SPA async component rendering
-        setTimeout(triggerClaim, 800);
-        setTimeout(triggerClaim, 2200);
-      }
-    };
-
-    chrome.tabs.onUpdated.addListener(tabListener);
-
-    // 4. Safety timeout: close tab after 12s if not already closed by AUTO_CLAIM_FINISHED
-    setTimeout(() => {
-      chrome.tabs.onUpdated.removeListener(tabListener);
-      if (activeAutoClaimTabs.has(tab.id)) {
-        activeAutoClaimTabs.delete(tab.id);
-        chrome.tabs.remove(tab.id).catch(() => { });
-        console.log(`[Auto-Claim Link] Tab #${tab.id} đã tự động đóng an toàn sau 12s.`);
-      }
-    }, 12000);
-
-  } catch (e) {
-    console.warn('[Auto-Claim Link] Lỗi mở link tự động:', e);
+    if (modified) {
+      await chrome.storage.local.set({ zaloStream });
+      broadcast({ type: 'ZALO_STREAM_UPDATE', stream: zaloStream });
+    }
+  } catch (err) {
+    console.error('Failed to update zalo stream result:', err);
   }
 }
 
 /**
- * Process incoming Zalo detected message
+ * Lazily initialize the persistent serialized slow voucher queue for high-volume Zalo groups
+ */
+async function getZaloVoucherQueue() {
+  if (zaloVoucherQueue) return zaloVoucherQueue;
+  if (!zaloQueueInitPromise) {
+    zaloQueueInitPromise = (async () => {
+      const stored = await chrome.storage.local.get(['zaloSeenCodes', 'zaloQueueDelayMs']);
+      const savedDelay = Number(stored.zaloQueueDelayMs);
+      if (Number.isFinite(savedDelay) && savedDelay >= 3000) {
+        zaloQueueDelayMs = savedDelay;
+      }
+
+      zaloVoucherQueue = createVoucherQueue({
+        initialSeenMap: stored.zaloSeenCodes || {},
+        getDelayMs: () => zaloQueueDelayMs,
+        jitterMs: 2500,
+        resetDebounceMs: 120000,
+        savedResetCooldownMs: 900000,
+        saveFn: async (code) => {
+          return await smartSaveVoucher(code);
+        },
+        onUpdate: (snapshot) => {
+          broadcast({ type: 'ZALO_QUEUE_UPDATE', queue: snapshot });
+        },
+        onPersistSeen: (seenObj) => {
+          chrome.storage.local.set({ zaloSeenCodes: seenObj }).catch(() => {});
+        },
+        onItemDone: async (completedItem) => {
+          await appendHistory({
+            code: completedItem.code,
+            status: completedItem.alreadySaved ? 'ALREADY_SAVED' : (completedItem.success ? 'SUCCESS' : 'FAILED'),
+            message: `(Hàng đợi Zalo [${completedItem.groupName}]): ${completedItem.message}`,
+            time: new Date().toLocaleTimeString('vi-VN'),
+            date: new Date().toLocaleDateString('vi-VN')
+          });
+
+          await updateZaloStreamResult(completedItem.messageId, completedItem.code, {
+            success: completedItem.success,
+            alreadySaved: completedItem.alreadySaved,
+            status: completedItem.status,
+            message: completedItem.message,
+            triggerLabel: completedItem.triggerLabel
+          });
+        }
+      });
+
+      return zaloVoucherQueue;
+    })();
+  }
+  return zaloQueueInitPromise;
+}
+
+/**
+ * Process incoming NEW Zalo detected message:
+ * - Strictly skips back-voucher links (never auto-opens tabs for links).
+ * - Filters codes through serialized slow VoucherQueueManager (only NEW or RESET codes).
+ * - Saves strictly one code at a time at a slow, anti-bot-safe pace.
  */
 async function handleZaloMessage(payload) {
-  const { codes = [], links = [], groupName = 'Zalo Group', senderName = 'User', text = '' } = payload;
+  const { id, codes = [], links = [], groupName = 'Zalo Group', text = '' } = payload;
   const {
     enableZaloSniffer = true,
     autoClaimZaloCodes = true,
-    autoOpenZaloLinks = true,
     zaloTargetGroup = '[23] LONGHOUSEE'
-  } = await chrome.storage.local.get(['enableZaloSniffer', 'autoClaimZaloCodes', 'autoOpenZaloLinks', 'zaloTargetGroup']);
+  } = await chrome.storage.local.get(['enableZaloSniffer', 'autoClaimZaloCodes', 'zaloTargetGroup']);
 
   if (!enableZaloSniffer) return;
 
@@ -971,50 +944,73 @@ async function handleZaloMessage(payload) {
     return;
   }
 
-  // Strict check: Only process and log authentic Shopee messages (drop longhousee and other domains)
+  // Strict check 1: Only process authentic Shopee messages (drop longhousee & non-Shopee domains)
   if (!isShopeeMessage(text, links, true)) {
-    console.log(`[Shopee Voucher Sniffer] Bỏ qua tin nhắn không thuộc Shopee hoặc chứa tên miền ngoài (longhousee, etc.): ${text.slice(0, 60)}`);
+    console.log(`[Shopee Voucher Sniffer] Bỏ qua tin nhắn không thuộc Shopee: ${text.slice(0, 60)}`);
     return;
   }
 
+  // Strict check 2: Skip link-only back-voucher messages (focus solely on text voucher codes)
+  if (!codes || codes.length === 0) {
+    return;
+  }
+
+  const queue = await getZaloVoucherQueue();
+  const messageId = id || `zalo_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
   const results = [];
+  if (autoClaimZaloCodes) {
+    const { enqueued, skipped } = queue.enqueueFromMessage({
+      codes,
+      text,
+      groupName,
+      senderName: payload.senderName || 'Thành viên',
+      messageId,
+      timestamp: payload.timestamp || Date.now()
+    });
 
-  // 1. Process Voucher Codes
-  if (autoClaimZaloCodes && codes.length > 0) {
-    for (let i = 0; i < codes.length; i++) {
-      const code = codes[i];
-      const res = await smartSaveVoucher(code);
-      const friendlyMsg = res.message;
-      const isSuccess = res.success || res.alreadySaved;
-      results.push({ code, success: isSuccess, message: friendlyMsg, alreadySaved: res.alreadySaved });
-
-      await appendHistory({
-        code,
-        status: isSuccess ? 'SUCCESS' : 'FAILED',
-        message: `(Từ Zalo [${groupName}]): ${friendlyMsg}`,
-        time: new Date().toLocaleTimeString('vi-VN'),
-        date: new Date().toLocaleDateString('vi-VN')
+    for (const item of enqueued) {
+      results.push({
+        code: item.code,
+        success: false,
+        alreadySaved: false,
+        status: 'queued',
+        triggerLabel: item.triggerLabel,
+        message: `Trong hàng đợi (${item.triggerLabel})`
       });
+    }
+    for (const sk of skipped) {
+      results.push({
+        code: sk.code,
+        success: false,
+        alreadySaved: false,
+        status: 'skipped',
+        message: sk.reason === 'in_queue' ? 'Đang chờ trong hàng đợi' : 'Mã cũ / trùng — bỏ qua'
+      });
+    }
 
-      // Safe human-like delay with random jitter between consecutive voucher codes to prevent Shopee bot scanning
-      if (i < codes.length - 1) {
-        const safeDelay = 2600 + Math.floor(Math.random() * 1000); // 2.6s - 3.6s
-        console.log(`[Shopee Saver Zalo] Tốc độ an toàn: Nghỉ ${safeDelay}ms trước khi lưu mã tiếp theo để chống quét và bắt thông báo...`);
-        await new Promise(r => setTimeout(r, safeDelay));
-      }
+    // Only log to live feed if at least one new/reset code was accepted, avoiding flood from duplicate spam
+    if (enqueued.length === 0) {
+      console.log(`[Shopee Queue] Bỏ qua tin nhắn trùng lặp hoàn toàn (${skipped.length} mã cũ).`);
+      return;
+    }
+  } else {
+    for (const code of codes) {
+      results.push({
+        code,
+        success: false,
+        alreadySaved: false,
+        status: 'skipped',
+        message: 'Đã tắt tự động lưu mã'
+      });
     }
   }
 
-  // 2. Process Shopee Links
-  if (autoOpenZaloLinks && links.length > 0) {
-    for (const link of links) {
-      autoClaimShopeeLink(link, groupName);
-    }
-  }
-
-  // Save to live stream log
+  // Save to live stream log (without auto-opening any links)
   await appendZaloStream({
     ...payload,
+    id: messageId,
+    links: [],
     results,
     savedAt: Date.now()
   });
@@ -1857,6 +1853,49 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     case 'GET_BANNER_WATCH_STATUS':
       sendResponse(getBannerWatchSummary());
       return false;
+
+    case 'GET_ZALO_QUEUE_STATUS':
+      getZaloVoucherQueue().then(q => sendResponse({ success: true, queue: q.getSnapshot() }));
+      return true;
+
+    case 'ZALO_QUEUE_PAUSE':
+      getZaloVoucherQueue().then(q => {
+        q.pause();
+        sendResponse({ success: true, queue: q.getSnapshot() });
+      });
+      return true;
+
+    case 'ZALO_QUEUE_RESUME':
+      getZaloVoucherQueue().then(q => {
+        q.resume();
+        sendResponse({ success: true, queue: q.getSnapshot() });
+      });
+      return true;
+
+    case 'ZALO_QUEUE_CLEAR':
+      getZaloVoucherQueue().then(q => {
+        q.clearPending();
+        sendResponse({ success: true, queue: q.getSnapshot() });
+      });
+      return true;
+
+    case 'ZALO_QUEUE_RESET_MEMORY':
+      getZaloVoucherQueue().then(q => {
+        q.resetSeenMemory();
+        sendResponse({ success: true, queue: q.getSnapshot() });
+      });
+      return true;
+
+    case 'ZALO_QUEUE_SET_DELAY': {
+      const nextDelay = Math.max(3000, Number(payload?.delayMs) || 6000);
+      zaloQueueDelayMs = nextDelay;
+      chrome.storage.local.set({ zaloQueueDelayMs: nextDelay }).catch(() => {});
+      getZaloVoucherQueue().then(q => {
+        q.setDelayMs(nextDelay);
+        sendResponse({ success: true, queue: q.getSnapshot() });
+      });
+      return true;
+    }
 
     case 'FETCH_BANNER_INFO':
       fetchBannerCollections(payload?.url || 'goi-ShopeeVIP').then(sendResponse);

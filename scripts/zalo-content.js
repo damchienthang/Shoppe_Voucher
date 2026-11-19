@@ -12,10 +12,14 @@
   if (window.__shopee_zalo_sniffer_injected__) return;
   window.__shopee_zalo_sniffer_injected__ = true;
 
-  // Processed messages cache
+  // Processed messages cache & new-message-only session tracking
   const processedMessageHashes = new Set();
+  const MSG_SELECTOR = '.chat-message, .msg-view, .chat-item, .card--text, .chat-bubble';
   let isSnifferEnabled = true;
   let targetGroupFilter = '[23] LONGHOUSEE';
+  let activeTrackedGroup = '';
+  let sessionStartedAt = Date.now();
+  let sessionReadyAt = Date.now() + 2500;
 
   // Helper to safely check if extension context is still valid
   function isExtensionValid() {
@@ -379,61 +383,139 @@
   }
 
   /**
-   * Process a single new message element in Zalo
+   * Silently marks all currently rendered messages as historical baseline
+   * so opening Zalo or switching into the target group NEVER re-triggers old messages.
+   */
+  function markExistingMessagesAsBaseline(groupName) {
+    activeTrackedGroup = groupName || '';
+    sessionStartedAt = Date.now();
+    sessionReadyAt = sessionStartedAt + 2500;
+
+    const existing = document.querySelectorAll(MSG_SELECTOR);
+    existing.forEach(el => {
+      el.setAttribute('data-sv-processed', 'baseline');
+      const txt = (el.innerText || el.textContent || '').trim();
+      if (txt) {
+        const senderEl = el.closest('.chat-message')?.querySelector('.sender-name, .author-name, .chat-item__sender')
+          || el.querySelector('.sender-name');
+        const sender = senderEl ? (senderEl.innerText || '').trim() : 'Thành viên';
+        processedMessageHashes.add(hashMessage(sender, txt));
+      }
+    });
+  }
+
+  /**
+   * Checks if a newly inserted DOM node is actually an old historical message
+   * loaded by scrolling up or displaying a clock time older than session open.
+   */
+  function isHistoricalOrPrependedMessage(msgEl, textContent) {
+    // 1. Still inside initial group-open warmup window -> always baseline
+    if (Date.now() < sessionReadyAt) {
+      return true;
+    }
+
+    // 2. If user scrolled up, Zalo prepends older messages ABOVE already-processed messages.
+    // If any already-processed message appears AFTER msgEl in DOM order, msgEl is older history.
+    const processedNodes = document.querySelectorAll('[data-sv-processed]');
+    if (processedNodes.length > 0) {
+      const lastProcessed = processedNodes[processedNodes.length - 1];
+      if (lastProcessed && lastProcessed !== msgEl) {
+        const pos = msgEl.compareDocumentPosition(lastProcessed);
+        const lastIsAfterMsg = Boolean(pos & Node.DOCUMENT_POSITION_FOLLOWING);
+        if (lastIsAfterMsg && !msgEl.contains(lastProcessed) && !lastProcessed.contains(msgEl)) {
+          return true;
+        }
+      }
+    }
+
+    // 3. Explicit old-date markers inside Zalo message bubbles (e.g., "Hôm qua", "12/05/2026")
+    if (/\b(hôm qua|hom qua)\b/i.test(textContent)) {
+      return true;
+    }
+
+    // 4. Visible Zalo time element (e.g., "09:15") clearly older than when user opened the group
+    const timeEl = msgEl.querySelector('.card-send-time__sendTime, .msg-time, .message-time, [data-id="txt_msg_time"]');
+    if (timeEl) {
+      const timeTxt = (timeEl.innerText || timeEl.textContent || '').trim();
+      const hm = timeTxt.match(/^(\d{1,2}):(\d{2})$/);
+      if (hm) {
+        const msgDate = new Date(sessionStartedAt);
+        msgDate.setHours(Number(hm[1]), Number(hm[2]), 0, 0);
+        // Allow 2 minutes clock skew; ignore anything clearly sent before opening Zalo
+        if (msgDate.getTime() < sessionStartedAt - 120000) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Process a single newly arriving message element in Zalo.
+   * Strictly skips old messages on open/scroll-up and ignores link-only back-voucher messages.
    */
   function processMessageElement(msgEl) {
     if (!isSnifferEnabled || !isExtensionValid()) return;
+    if (!msgEl || msgEl.hasAttribute('data-sv-processed')) return;
 
     // Strict Filter 0: MUST be inside target group [23] LONGHOUSEE
     const currentGroupName = getActiveChatName();
     if (!isTargetGroup(currentGroupName)) {
-      // Not the target group -> Ignore completely (protect user privacy in other chats)
+      activeTrackedGroup = '';
       return;
     }
 
-    if (msgEl.hasAttribute('data-sv-processed')) return;
-    msgEl.setAttribute('data-sv-processed', 'true');
+    // Detect fresh entry / switch into target group -> seed existing chat history as baseline!
+    if (activeTrackedGroup !== currentGroupName) {
+      markExistingMessagesAsBaseline(currentGroupName);
+      return;
+    }
 
     const textContent = (msgEl.innerText || msgEl.textContent || '').trim();
     if (!textContent) return;
 
-    // Strict Filter 1: Extract official Shopee voucher links
-    const shopeeLinks = extractOfficialVoucherLinks(msgEl, textContent);
+    // Guard against old messages during warmup, scroll-up pagination, or past timestamps
+    if (isHistoricalOrPrependedMessage(msgEl, textContent)) {
+      msgEl.setAttribute('data-sv-processed', 'baseline');
+      const senderElOld = msgEl.closest('.chat-message')?.querySelector('.sender-name, .author-name, .chat-item__sender')
+        || msgEl.querySelector('.sender-name');
+      const senderOld = senderElOld ? (senderElOld.innerText || '').trim() : 'Thành viên';
+      processedMessageHashes.add(hashMessage(senderOld, textContent));
+      return;
+    }
 
-    // Strict Filter 2: Verify message belongs to Shopee (reject longhousee & other domains)
+    msgEl.setAttribute('data-sv-processed', 'true');
+
+    // Strict Filter 1: Verify message belongs to Shopee (reject longhousee & other domains)
+    const shopeeLinks = extractOfficialVoucherLinks(msgEl, textContent);
     if (!isStrictShopeeMessage(textContent, shopeeLinks)) {
       return;
     }
 
+    // Strict Filter 2: Extract text voucher codes ONLY (do NOT chase back-voucher links!)
     const voucherCodes = extractVoucherCodesFromText(textContent);
-
-    // If no voucher codes AND no official voucher links found -> IGNORE
-    if (shopeeLinks.length === 0 && voucherCodes.length === 0) {
+    if (voucherCodes.length === 0) {
       return;
     }
 
-    const senderEl = msgEl.closest('.chat-message')?.querySelector('.sender-name, .author-name, .chat-item__sender') 
-                  || msgEl.querySelector('.sender-name');
+    const senderEl = msgEl.closest('.chat-message')?.querySelector('.sender-name, .author-name, .chat-item__sender')
+      || msgEl.querySelector('.sender-name');
     const senderName = senderEl ? (senderEl.innerText || '').trim() : 'Thành viên';
     const groupName = currentGroupName || targetGroupFilter;
 
-    // Deduplication check
+    // Deduplication check on identical raw message
     const msgHash = hashMessage(senderName, textContent);
     if (processedMessageHashes.has(msgHash)) return;
     processedMessageHashes.add(msgHash);
 
-    if (processedMessageHashes.size > 500) {
+    if (processedMessageHashes.size > 600) {
       const first = processedMessageHashes.values().next().value;
       processedMessageHashes.delete(first);
     }
 
-    console.log(`[Shopee Voucher Sniffer] Bắt được Voucher Shopee từ nhóm [${groupName}]:`, {
-      sender: senderName,
-      links: shopeeLinks,
-      codes: voucherCodes
-    });
-
-    updateWidgetStatus(`Đã bắt ${voucherCodes.length} mã & ${shopeeLinks.length} link từ [${groupName}]`);
+    console.log(`[Shopee Voucher Sniffer] Tin mới có ${voucherCodes.length} mã từ [${groupName}]:`, voucherCodes);
+    updateWidgetStatus(`Đưa ${voucherCodes.length} mã mới vào hàng đợi lưu chậm`);
 
     try {
       if (isExtensionValid()) {
@@ -444,7 +526,7 @@
             groupName,
             senderName,
             text: textContent,
-            links: shopeeLinks,
+            links: [],
             codes: voucherCodes,
             timestamp: Date.now(),
             timeStr: new Date().toLocaleTimeString('vi-VN')
@@ -461,27 +543,31 @@
   }
 
   /**
-   * Set up MutationObserver to watch Zalo messages in real-time with maximum speed
+   * Set up MutationObserver to watch ONLY newly arriving Zalo messages.
+   * Existing messages already in chat when Zalo opens are marked as baseline and ignored.
    */
   function setupMessageObserver() {
+    // 1. Mark all currently loaded messages as historical baseline (never capture old messages!)
+    markExistingMessagesAsBaseline(getActiveChatName());
+
     const observer = new MutationObserver(mutations => {
       for (const mutation of mutations) {
         if (mutation.addedNodes && mutation.addedNodes.length > 0) {
           mutation.addedNodes.forEach(node => {
             if (node.nodeType === Node.ELEMENT_NODE) {
-              const messages = node.querySelectorAll ? node.querySelectorAll('.chat-message, .msg-view, .chat-item, .card--text, .chat-bubble, [data-id]') : [];
+              const messages = node.querySelectorAll ? node.querySelectorAll(MSG_SELECTOR) : [];
               if (messages.length > 0) {
                 messages.forEach(processMessageElement);
-              } else if (node.classList?.contains('chat-message') || node.classList?.contains('msg-view') || node.classList?.contains('card--text') || node.classList?.contains('chat-item')) {
+              } else if (node.matches && node.matches(MSG_SELECTOR)) {
                 processMessageElement(node);
               }
             } else if (node.nodeType === Node.TEXT_NODE && node.parentElement) {
-              const msgParent = node.parentElement.closest('.chat-message, .msg-view, .chat-item, .card--text, .chat-bubble');
+              const msgParent = node.parentElement.closest(MSG_SELECTOR);
               if (msgParent) processMessageElement(msgParent);
             }
           });
         } else if (mutation.type === 'characterData' && mutation.target?.parentElement) {
-          const msgParent = mutation.target.parentElement.closest('.chat-message, .msg-view, .chat-item, .card--text, .chat-bubble');
+          const msgParent = mutation.target.parentElement.closest(MSG_SELECTOR);
           if (msgParent) processMessageElement(msgParent);
         }
       }
@@ -495,22 +581,33 @@
       });
     }
 
-    // High-speed polling (every 150ms) to ensure ZERO messages are ever delayed or dropped
+    // Watch for group switches and catch newly mounted message nodes after warmup
     setInterval(() => {
       if (!isSnifferEnabled || !isExtensionValid()) return;
+      const currentGroup = getActiveChatName();
+      if (!isTargetGroup(currentGroup)) {
+        activeTrackedGroup = '';
+        return;
+      }
+      if (activeTrackedGroup !== currentGroup) {
+        markExistingMessagesAsBaseline(currentGroup);
+        return;
+      }
+      // During warmup window, keep absorbing late-rendered historical DOM nodes silently
+      if (Date.now() < sessionReadyAt) {
+        const warmNodes = document.querySelectorAll(
+          '.chat-message:not([data-sv-processed]), .msg-view:not([data-sv-processed]), .card--text:not([data-sv-processed]), .chat-item:not([data-sv-processed])'
+        );
+        warmNodes.forEach(el => el.setAttribute('data-sv-processed', 'baseline'));
+        return;
+      }
       const unread = document.querySelectorAll(
         '.chat-message:not([data-sv-processed]), .msg-view:not([data-sv-processed]), .card--text:not([data-sv-processed]), .chat-item:not([data-sv-processed])'
       );
       for (const el of unread) {
         processMessageElement(el);
       }
-    }, 150);
-
-    // Immediate initial check (300ms)
-    setTimeout(() => {
-      const existing = document.querySelectorAll('.chat-message, .msg-view, .chat-item, .card--text, .chat-bubble');
-      existing.forEach(processMessageElement);
-    }, 300);
+    }, 350);
   }
 
   function injectZaloWidget() {
@@ -526,9 +623,9 @@
     const badge = document.createElement('div');
     badge.id = 'sv-zalo-badge';
     badge.innerHTML = `
-      <div class="sv-z-icon">S</div>
+      <div class="sv-z-icon">V</div>
       <div class="sv-z-content">
-        <div class="sv-z-title">Shopee Voucher Sniffer</div>
+        <div class="sv-z-title">VauS</div>
         <div id="sv-z-status" class="sv-z-status">Đang theo dõi nhóm: ${targetGroupFilter}</div>
       </div>
       <button id="sv-z-open-dash" title="Mở Bảng Điều Khiển">Cài đặt</button>

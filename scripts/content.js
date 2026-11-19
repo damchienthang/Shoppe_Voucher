@@ -22,7 +22,7 @@
     widget.id = 'sv-floating-widget';
     widget.innerHTML = `
       <div class="sv-widget-container">
-        <button id="sv-widget-toggle" class="sv-pulse" title="Shopee Voucher Auto-Saver">
+        <button id="sv-widget-toggle" class="sv-pulse" title="VauS">
           <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
             <line x1="7" y1="7" x2="7.01" y2="7"></line>
@@ -32,10 +32,10 @@
         <div id="sv-widget-panel" class="sv-panel-hidden">
           <div class="sv-panel-header">
             <div class="sv-brand">
-              <span class="sv-logo-badge">S</span>
+              <span class="sv-logo-badge">V</span>
               <div>
-                <div class="sv-title">Voucher Auto-Saver</div>
-                <div class="sv-subtitle">Trợ lý săn mã Shopee</div>
+                <div class="sv-title">VauS</div>
+                <div class="sv-subtitle">Lưu voucher Shopee</div>
               </div>
             </div>
             <button id="sv-panel-close" class="sv-icon-btn">&times;</button>

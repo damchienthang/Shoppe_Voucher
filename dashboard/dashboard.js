@@ -38,13 +38,24 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const zaloEnableToggle = document.getElementById('zalo-enable-toggle');
   const zaloAutoclaimCodes = document.getElementById('zalo-autoclaim-codes');
-  const zaloAutoopenLinks = document.getElementById('zalo-autoopen-links');
+  const zaloQueueDelaySelect = document.getElementById('zalo-queue-delay-select');
   const zaloShowWidgetToggle = document.getElementById('zalo-show-widget-toggle');
   const zaloStreamContainer = document.getElementById('zalo-stream-container');
   const btnClearZaloFeed = document.getElementById('btn-clear-zalo-feed');
   const zaloTargetGroupInput = document.getElementById('zalo-target-group-input');
   const btnSaveZaloGroup = document.getElementById('btn-save-zalo-group');
   const zaloActiveGroupLabel = document.getElementById('zalo-active-group-label');
+  const zqStatPending = document.getElementById('zq-stat-pending');
+  const zqStatSaved = document.getElementById('zq-stat-saved');
+  const zqStatSkipped = document.getElementById('zq-stat-skipped');
+  const zqStatSeen = document.getElementById('zq-stat-seen');
+  const zqActiveBanner = document.getElementById('zq-active-banner');
+  const zqActiveText = document.getElementById('zq-active-text');
+  const zqPendingList = document.getElementById('zq-pending-list');
+  const zqProcessedList = document.getElementById('zq-processed-list');
+  const btnZqTogglePause = document.getElementById('btn-zq-toggle-pause');
+  const btnZqClear = document.getElementById('btn-zq-clear');
+  const btnZqResetMemory = document.getElementById('btn-zq-reset-memory');
 
   // Tab 3: Scheduler Elements
   const presetTimeBtns = document.querySelectorAll('.time-preset-btn');
@@ -77,9 +88,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   let activeFilter = 'all';
   let countdownTimerId = null;
   let targetScheduleTimestamp = 0;
+  let batchStoppedByUser = false;
+  let zaloQueueWasActive = false;
+  let zaloQueueLastCompletedTotal = 0;
 
-  // Sound Chime
-  function playSuccessChime() {
+  // Completion Sound Chime (plays once only after all vouchers finish saving)
+  function playCompletionChime() {
     try {
       const { settingSoundVal = true } = window.__cachedSettings || {};
       if (!settingSoundVal) return;
@@ -96,6 +110,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       gain.connect(audioCtx.destination);
       osc.start();
       osc.stop(audioCtx.currentTime + 0.35);
+      setTimeout(() => {
+        try { audioCtx.close(); } catch (_) {}
+      }, 500);
     } catch (e) {
       // Audio context may be restricted before user interaction
     }
@@ -105,26 +122,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 1. Navigation & Hash Routing
   // -------------------------------------------------------------
   const tabInfo = {
-    'tab-batch': {
-      title: 'Lưu Mã Hàng Loạt',
-      desc: 'Dán danh sách mã voucher để tự động nhập vào ví Shopee'
-    },
-    'tab-zalo': {
-      title: 'Zalo Auto-Sniffer (Tự Động Bắt Tin Nhắn & Link)',
-      desc: 'Lắng nghe trực tiếp tin nhắn từ các nhóm Zalo săn sale và tự động lưu voucher'
-    },
-    'tab-scheduler': {
-      title: 'Hẹn Giờ Săn Mã 0h',
-      desc: 'Thiết lập thời gian mục tiêu chuẩn từng mili-giây cho các khung giờ vàng'
-    },
-    'tab-banner-watcher': {
-      title: 'Canh Mã Back Banner (Dải Giờ Vàng & Canh Ngẫu Nhiên 24/7)',
-      desc: 'Tự động rà soát API Shopee và chớp mã back ngẫu nhiên trực tiếp vào ví'
-    },
-    'tab-settings': {
-      title: 'Cài Đặt Hệ Thống',
-      desc: 'Tùy chỉnh tốc độ gửi request, độ trễ và các cấu hình hệ thống'
-    }
+    'tab-batch': { title: 'Lưu mã hàng loạt' },
+    'tab-zalo': { title: 'Bắt mã Zalo' },
+    'tab-scheduler': { title: 'Hẹn giờ săn mã' },
+    'tab-banner-watcher': { title: 'Canh mã back' },
+    'tab-settings': { title: 'Cài đặt' }
   };
 
   function switchTab(tabId) {
@@ -138,8 +140,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       activeNav.classList.add('active');
       activePanel.classList.add('active');
       if (tabInfo[tabId]) {
-        activeTabTitle.textContent = tabInfo[tabId].title;
-        activeTabDesc.textContent = tabInfo[tabId].desc;
+        if (activeTabTitle) activeTabTitle.textContent = tabInfo[tabId].title;
+        if (activeTabDesc) activeTabDesc.textContent = tabInfo[tabId].desc || '';
       }
       try {
         history.replaceState(null, '', '#' + tabId);
@@ -150,6 +152,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       if (tabId === 'tab-zalo') {
         loadZaloStream();
+        loadZaloQueueStatus();
       }
     }
   }
@@ -257,7 +260,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   function renderParsedTags(parsedList) {
     if (parsedList.length === 0) {
-      parsedTagsContainer.innerHTML = '<span class="tag-placeholder">Các mã nhận diện sẽ hiển thị tại đây...</span>';
+      parsedTagsContainer.innerHTML = '<span class="tag-placeholder">Chưa có mã</span>';
       return;
     }
 
@@ -284,7 +287,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderResultsTable();
     updateStats(0, 0, 0);
     batchProgressBar.style.width = '0%';
-    batchProgressLabel.textContent = 'Sẵn sàng thực hiện';
+    batchProgressLabel.textContent = 'Sẵn sàng';
     batchProgressPercent.textContent = '0%';
   });
 
@@ -320,6 +323,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   btnStopBatch.addEventListener('click', () => {
+    batchStoppedByUser = true;
     chrome.runtime.sendMessage({ type: 'STOP_BATCH_SAVE' });
     btnRunBatch.classList.remove('hidden');
     btnStopBatch.classList.add('hidden');
@@ -408,18 +412,111 @@ document.addEventListener('DOMContentLoaded', async () => {
   // -------------------------------------------------------------
   // 4. Tab 2: Zalo Auto-Sniffer Logic
   // -------------------------------------------------------------
+  let currentQueuePaused = false;
+
+  function renderZaloQueue(queue) {
+    if (!queue) return;
+    currentQueuePaused = Boolean(queue.isPaused);
+    const stats = queue.stats || {};
+    const savedTotal = Number(stats.savedTotal || 0) + Number(stats.alreadySavedTotal || 0);
+
+    if (zqStatPending) zqStatPending.textContent = Number(queue.pendingCount || 0);
+    if (zqStatSaved) zqStatSaved.textContent = savedTotal;
+    if (zqStatSkipped) zqStatSkipped.textContent = Number(stats.skippedDuplicates || 0);
+    if (zqStatSeen) zqStatSeen.textContent = Number(queue.seenCount || 0);
+
+    if (btnZqTogglePause) {
+      btnZqTogglePause.textContent = currentQueuePaused ? 'Tiếp tục' : 'Tạm dừng';
+      btnZqTogglePause.className = currentQueuePaused ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm';
+    }
+
+    if (zqActiveBanner && zqActiveText) {
+      if (currentQueuePaused) {
+        zqActiveBanner.className = 'zq-active-banner paused';
+        zqActiveText.textContent = `Đang tạm dừng (${queue.pendingCount || 0} mã chờ)`;
+      } else if (queue.activeItem) {
+        zqActiveBanner.className = 'zq-active-banner running';
+        zqActiveText.textContent = `Đang lưu ${queue.activeItem.code} · còn ${queue.pendingCount || 0} mã`;
+      } else if ((queue.pendingCount || 0) > 0) {
+        zqActiveBanner.className = 'zq-active-banner running';
+        zqActiveText.textContent = `Nghỉ ${Math.round((queue.delayMs || 6000) / 1000)}s+ · còn ${queue.pendingCount} mã`;
+      } else {
+        zqActiveBanner.className = 'zq-active-banner idle';
+        zqActiveText.textContent = 'Hàng đợi rảnh';
+      }
+    }
+
+    if (zqPendingList) {
+      const pending = Array.isArray(queue.pending) ? queue.pending : [];
+      if (pending.length === 0) {
+        zqPendingList.innerHTML = '<div class="zq-empty">Trống</div>';
+      } else {
+        zqPendingList.innerHTML = pending.map((item, idx) => {
+          const isReset = item.trigger === 'reset_slot' || item.trigger === 'reset_signal';
+          const tagClass = isReset ? 'zq-tag reset' : 'zq-tag new';
+          const timeStr = item.enqueuedAt ? new Date(item.enqueuedAt).toLocaleTimeString('vi-VN') : '';
+          return `
+            <div class="zq-row">
+              <div class="zq-row-left">
+                <span class="zq-idx">#${idx + 1}</span>
+                <span class="zq-code">${escapeHtml(item.code)}</span>
+                <span class="${tagClass}">${escapeHtml(item.triggerLabel || 'Mã mới')}</span>
+              </div>
+              <span class="zq-time">${escapeHtml(timeStr)}</span>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    if (zqProcessedList) {
+      const processed = Array.isArray(queue.recentProcessed) ? queue.recentProcessed : [];
+      if (processed.length === 0) {
+        zqProcessedList.innerHTML = '<div class="zq-empty">Trống</div>';
+      } else {
+        zqProcessedList.innerHTML = processed.map(item => {
+          const isAlready = Boolean(item.alreadySaved) || item.status === 'already_saved';
+          const badgeClass = isAlready ? 'info' : (item.success ? 'success' : 'failed');
+          const badgeLabel = isAlready ? 'Đã có trong ví' : (item.success ? 'Thành công' : 'Thất bại');
+          return `
+            <div class="zq-row processed">
+              <div class="zq-row-top">
+                <span class="zq-code">${escapeHtml(item.code)}</span>
+                <span class="status-badge ${badgeClass}">${badgeLabel}</span>
+              </div>
+              <div class="zq-row-msg">${escapeHtml(item.message || '')}</div>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+  }
+
+  function loadZaloQueueStatus() {
+    chrome.runtime.sendMessage({ type: 'GET_ZALO_QUEUE_STATUS' }, res => {
+      if (res && res.queue) {
+        const st = res.queue.stats || {};
+        zaloQueueLastCompletedTotal = Number(st.savedTotal || 0) + Number(st.alreadySavedTotal || 0) + Number(st.failedTotal || 0);
+        zaloQueueWasActive = Boolean(res.queue.activeItem || (res.queue.pendingCount || 0) > 0);
+        renderZaloQueue(res.queue);
+      }
+    });
+  }
+
   async function initZaloSettings() {
     const {
       enableZaloSniffer = true,
       autoClaimZaloCodes = true,
-      autoOpenZaloLinks = true,
+      zaloQueueDelayMs = 6000,
       showZaloWidget = true,
       zaloTargetGroup = '[23] LONGHOUSEE'
-    } = await chrome.storage.local.get(['enableZaloSniffer', 'autoClaimZaloCodes', 'autoOpenZaloLinks', 'showZaloWidget', 'zaloTargetGroup']);
+    } = await chrome.storage.local.get(['enableZaloSniffer', 'autoClaimZaloCodes', 'zaloQueueDelayMs', 'showZaloWidget', 'zaloTargetGroup']);
 
     zaloEnableToggle.checked = enableZaloSniffer;
     zaloAutoclaimCodes.checked = autoClaimZaloCodes;
-    zaloAutoopenLinks.checked = autoOpenZaloLinks;
+    if (zaloQueueDelaySelect) {
+      zaloQueueDelaySelect.value = String(zaloQueueDelayMs || 6000);
+    }
     if (zaloShowWidgetToggle) {
       zaloShowWidgetToggle.checked = showZaloWidget !== false;
     }
@@ -438,9 +535,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (zaloActiveGroupLabel) {
           zaloActiveGroupLabel.textContent = val;
         }
-        btnSaveZaloGroup.textContent = 'Đã lưu!';
+        btnSaveZaloGroup.textContent = 'Đã lưu';
         setTimeout(() => {
-          btnSaveZaloGroup.textContent = 'Lưu nhóm';
+          btnSaveZaloGroup.textContent = 'Lưu';
         }, 1800);
       });
     }
@@ -451,12 +548,41 @@ document.addEventListener('DOMContentLoaded', async () => {
     zaloAutoclaimCodes.addEventListener('change', () => {
       chrome.storage.local.set({ autoClaimZaloCodes: zaloAutoclaimCodes.checked });
     });
-    zaloAutoopenLinks.addEventListener('change', () => {
-      chrome.storage.local.set({ autoOpenZaloLinks: zaloAutoopenLinks.checked });
-    });
+    if (zaloQueueDelaySelect) {
+      zaloQueueDelaySelect.addEventListener('change', () => {
+        const delayMs = Number(zaloQueueDelaySelect.value) || 6000;
+        chrome.storage.local.set({ zaloQueueDelayMs: delayMs });
+        chrome.runtime.sendMessage({ type: 'ZALO_QUEUE_SET_DELAY', payload: { delayMs } }, res => {
+          if (res && res.queue) renderZaloQueue(res.queue);
+        });
+      });
+    }
     if (zaloShowWidgetToggle) {
       zaloShowWidgetToggle.addEventListener('change', () => {
         chrome.storage.local.set({ showZaloWidget: zaloShowWidgetToggle.checked });
+      });
+    }
+
+    if (btnZqTogglePause) {
+      btnZqTogglePause.addEventListener('click', () => {
+        const msgType = currentQueuePaused ? 'ZALO_QUEUE_RESUME' : 'ZALO_QUEUE_PAUSE';
+        chrome.runtime.sendMessage({ type: msgType }, res => {
+          if (res && res.queue) renderZaloQueue(res.queue);
+        });
+      });
+    }
+    if (btnZqClear) {
+      btnZqClear.addEventListener('click', () => {
+        chrome.runtime.sendMessage({ type: 'ZALO_QUEUE_CLEAR' }, res => {
+          if (res && res.queue) renderZaloQueue(res.queue);
+        });
+      });
+    }
+    if (btnZqResetMemory) {
+      btnZqResetMemory.addEventListener('click', () => {
+        chrome.runtime.sendMessage({ type: 'ZALO_QUEUE_RESET_MEMORY' }, res => {
+          if (res && res.queue) renderZaloQueue(res.queue);
+        });
       });
     }
 
@@ -466,6 +592,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         zaloShowWidgetToggle.checked = changes.showZaloWidget.newValue !== false;
       }
     });
+
+    loadZaloQueueStatus();
 
     // Bot Node.js Daemon Controller
     initBotDaemonController();
@@ -492,11 +620,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (botDot) botDot.className = botIsRunning ? 'bot-dot online' : 'bot-dot paused';
             if (botStatusText) {
               botStatusText.innerHTML = botIsRunning
-                ? `Bot Node.js đang chạy ngầm (Đã bắt: <strong>${data.stats?.messagesDetected || 0}</strong> tin, Lưu: <strong>${data.stats?.codesSaved || 0}</strong> mã)`
-                : 'Bot Node.js đang tạm dừng';
+                ? `Bot đang chạy · <strong>${data.stats?.messagesDetected || 0}</strong> tin · <strong>${data.stats?.codesSaved || 0}</strong> mã`
+                : 'Bot đang tạm dừng';
             }
             if (btnToggleBot) {
-              btnToggleBot.textContent = botIsRunning ? 'Tắt Chạy Ngầm' : 'Bật Chạy Ngầm';
+              btnToggleBot.textContent = botIsRunning ? 'Tắt chạy ngầm' : 'Bật chạy ngầm';
               btnToggleBot.className = botIsRunning ? 'btn btn-secondary btn-sm' : 'btn btn-primary btn-sm';
             }
             return;
@@ -511,12 +639,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         const hasTab = tabRes && tabRes.hasZaloTab;
         if (botDot) botDot.className = hasTab ? 'bot-dot online' : 'bot-dot offline';
         if (botStatusText) {
-          botStatusText.innerHTML = hasTab
-            ? 'Tab Zalo đang <strong>chạy ngầm trong Chrome</strong> (Đang theo dõi nhóm [23] LONGHOUSEE)'
-            : 'Chế độ chạy ngầm đang TẮT. Bấm <strong>"Bật Chạy Ngầm"</strong> để tự động ghim tab Zalo ngầm.';
+          botStatusText.textContent = hasTab ? 'Đang chạy ngầm trong Chrome' : 'Đang tắt';
         }
         if (btnToggleBot) {
-          btnToggleBot.textContent = hasTab ? 'Tắt Chạy Ngầm' : 'Bật Chạy Ngầm';
+          btnToggleBot.textContent = hasTab ? 'Tắt chạy ngầm' : 'Bật chạy ngầm';
           btnToggleBot.className = hasTab ? 'btn btn-secondary btn-sm' : 'btn btn-primary btn-sm';
         }
       });
@@ -598,8 +724,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (stream.length === 0) {
       zaloStreamContainer.innerHTML = `
         <div class="empty-feed">
-          <h4>Đang chờ tin nhắn mới từ nhóm Zalo mục tiêu...</h4>
-          <p>Mở <a href="https://chat.zalo.me" target="_blank" class="accent-link">chat.zalo.me</a> trên trình duyệt. Mọi tin nhắn chứa mã hoặc link Shopee từ nhóm [23] LONGHOUSEE sẽ xuất hiện ngay tại đây!</p>
+          <p>Chưa có tin nhắn mới.</p>
         </div>
       `;
       return;
@@ -609,27 +734,20 @@ document.addEventListener('DOMContentLoaded', async () => {
       const codeHtml = (item.codes || []).map(code => {
         const res = (item.results || []).find(r => r.code === code);
         const isAlreadySaved = res ? (Boolean(res.alreadySaved) || res.status === 'already_saved') : false;
+        const isQueued = res ? (res.status === 'queued' || res.status === 'processing') : true;
+        const isSkipped = res ? res.status === 'skipped' : false;
         const isSuccess = res ? res.success : false;
-        const msg = res ? (res.message || (isAlreadySaved ? 'Đã có trong ví' : isSuccess ? 'Đã lưu' : 'Thất bại')) : 'Đang xử lý';
-        const badgeClass = res ? (isAlreadySaved ? 'info' : isSuccess ? 'success' : 'failed') : 'pending';
+        const msg = res
+          ? (res.message || (isAlreadySaved ? 'Đã có trong ví' : isSuccess ? 'Đã lưu' : 'Thất bại'))
+          : 'Đang chờ trong hàng đợi';
+        const badgeClass = isQueued || isSkipped
+          ? 'pending'
+          : (isAlreadySaved ? 'info' : isSuccess ? 'success' : 'failed');
         return `
           <div class="feed-chip ${badgeClass}">
             <span class="chip-code">${escapeHtml(code)}</span>
             <span class="chip-status">${escapeHtml(msg)}</span>
           </div>
-        `;
-      }).join('');
-
-      const linkHtml = (item.links || []).map(link => {
-        let displayUrl = link;
-        try {
-          const u = new URL(link);
-          displayUrl = u.hostname + u.pathname;
-        } catch (e) {}
-        return `
-          <a href="${escapeHtml(link)}" target="_blank" class="feed-link-chip" title="${escapeHtml(link)}">
-            Mở Link: ${escapeHtml(displayUrl)}
-          </a>
         `;
       }).join('');
 
@@ -647,15 +765,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
           ${codeHtml ? `
             <div class="feed-framed-box">
-              <div class="feed-box-label">Mã voucher phát hiện:</div>
+              <div class="feed-box-label">Mã đã bắt</div>
               <div class="feed-chips-wrap">${codeHtml}</div>
-            </div>
-          ` : ''}
-
-          ${linkHtml ? `
-            <div class="feed-framed-box mt-8">
-              <div class="feed-box-label">Đường link săn mã:</div>
-              <div class="feed-links-wrap">${linkHtml}</div>
             </div>
           ` : ''}
         </div>
@@ -681,7 +792,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 5. Tab 3: Scheduler (Hẹn giờ 0h)
   // -------------------------------------------------------------
   scheduleLeadTime.addEventListener('input', () => {
-    leadTimeDisplay.textContent = `Sớm ${scheduleLeadTime.value} ms`;
+    leadTimeDisplay.textContent = `${scheduleLeadTime.value} ms`;
   });
 
   presetTimeBtns.forEach(btn => {
@@ -771,11 +882,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   function setSchedulerInactive() {
     targetScheduleTimestamp = 0;
-    countdownTargetText.textContent = 'Chưa đặt lịch';
+    countdownTargetText.textContent = 'Chưa đặt';
     btnActivateSchedule.classList.remove('hidden');
     btnCancelSchedule.classList.add('hidden');
     countdownStatusBox.className = 'schedule-status-box waiting';
-    scheduleStatusText.textContent = 'Đang chờ bạn cấu hình lịch hẹn...';
+    scheduleStatusText.textContent = 'Chưa đặt lịch';
     cdHours.textContent = '00';
     cdMins.textContent = '00';
     cdSecs.textContent = '00';
@@ -1055,13 +1166,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (btnStopBannerWatch) btnStopBannerWatch.classList.remove('hidden');
     if (bwLiveBadge) {
       bwLiveBadge.className = 'badge badge-success';
-      bwLiveBadge.textContent = 'Đang Canh Mã';
+      bwLiveBadge.textContent = 'Đang canh';
     }
     if (bwStatusBox) {
       bwStatusBox.className = 'schedule-status-box active mb-16';
     }
     if (bwStatusText) {
-      bwStatusText.textContent = state?.lastStatusText || 'Đang rà soát API Shopee liên tục...';
+      bwStatusText.textContent = state?.lastStatusText || 'Đang quét banner...';
     }
     if (bwStatChecks && state?.checkCount != null) {
       bwStatChecks.textContent = state.checkCount;
@@ -1079,13 +1190,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (btnStopBannerWatch) btnStopBannerWatch.classList.add('hidden');
     if (bwLiveBadge) {
       bwLiveBadge.className = 'badge badge-secondary';
-      bwLiveBadge.textContent = 'Đang Chờ';
+      bwLiveBadge.textContent = 'Đang chờ';
     }
     if (bwStatusBox) {
       bwStatusBox.className = 'schedule-status-box waiting mb-16';
     }
     if (bwStatusText) {
-      bwStatusText.textContent = 'Đang chờ bạn bấm "Bắt Đầu Canh Mã Back"...';
+      bwStatusText.textContent = 'Chưa chạy';
     }
   }
 
@@ -1204,6 +1315,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // -------------------------------------------------------------
   chrome.runtime.onMessage.addListener(msg => {
     if (msg.type === 'BATCH_STARTED') {
+      batchStoppedByUser = false;
       btnRunBatch.classList.add('hidden');
       btnStopBatch.classList.remove('hidden');
       batchProgressBar.style.width = '0%';
@@ -1224,10 +1336,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       const fails = currentResults.length - successes;
       updateStats(msg.total, successes, fails);
       renderResultsTable();
-
-      if (msg.result.success) {
-        playSuccessChime();
-      }
     }
 
     if (msg.type === 'BATCH_COMPLETED') {
@@ -1239,10 +1347,33 @@ document.addEventListener('DOMContentLoaded', async () => {
       const newlySaved = Math.max(0, Number(msg.summary.successCount || 0) - alreadySaved);
       const failed = Number(msg.summary.failCount || 0);
       batchProgressLabel.textContent = `Hoàn thành (${msg.summary.total} mã): ${newlySaved} lưu mới, ${alreadySaved} đã có trong ví, ${failed} thất bại`;
+
+      const processedCount = Array.isArray(msg.summary.results) ? msg.summary.results.length : Number(msg.summary.total || 0);
+      if (!batchStoppedByUser && Number(msg.summary.total || 0) > 0 && processedCount >= Number(msg.summary.total || 0)) {
+        playCompletionChime();
+      }
+      batchStoppedByUser = false;
     }
 
     if (msg.type === 'ZALO_STREAM_UPDATE') {
       renderZaloStream(msg.stream || []);
+    }
+
+    if (msg.type === 'ZALO_QUEUE_UPDATE' && msg.queue) {
+      const q = msg.queue;
+      const st = q.stats || {};
+      const processedTotal = Number(st.savedTotal || 0) + Number(st.alreadySavedTotal || 0) + Number(st.failedTotal || 0);
+      const isBusy = Boolean(q.activeItem || (q.pendingCount || 0) > 0);
+      if (isBusy) {
+        zaloQueueWasActive = true;
+      } else if (zaloQueueWasActive && !q.isPaused) {
+        zaloQueueWasActive = false;
+        if (processedTotal > zaloQueueLastCompletedTotal) {
+          playCompletionChime();
+        }
+        zaloQueueLastCompletedTotal = processedTotal;
+      }
+      renderZaloQueue(q);
     }
 
     if (msg.type === 'BANNER_WATCH_LOG') {
@@ -1262,7 +1393,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     if (msg.type === 'BANNER_VOUCHER_SAVED') {
-      playSuccessChime();
       appendBannerLog(new Date().toLocaleTimeString('vi-VN'), `🎉 [LƯU THÀNH CÔNG] Đã lưu vào ví: ${msg.voucher?.title || ''}`, 'success');
     }
   });

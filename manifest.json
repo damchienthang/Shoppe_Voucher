@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Shopee Voucher Auto-Saver Pro",
+  "name": "VauS",
   "version": "1.1.0",
-  "description": "Tự động lưu mã giảm giá Shopee hàng loạt, tự động bắt tin nhắn & link từ nhóm Zalo săn sale, hẹn giờ săn mã chuẩn từng mili-giây.",
+  "description": "Tự động lưu mã giảm giá Shopee hàng loạt, bắt tin nhắn mới từ nhóm Zalo vào hàng đợi lưu chậm, hẹn giờ săn mã và canh mã back.",
   "permissions": [
     "storage",
     "cookies",
@@ -31,6 +31,7 @@
     "type": "module"
   },
   "action": {
+    "default_title": "VauS",
     "default_popup": "popup/popup.html",
     "default_icon": {
       "16": "assets/icon16.png",

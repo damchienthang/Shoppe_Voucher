@@ -4,6 +4,7 @@
  * In a real Chrome Extension environment, chrome.runtime.id exists and this shim exits immediately.
  */
 import { normalizeSaveResult } from '../utils/parser.js';
+import { createVoucherQueue } from '../utils/voucher-queue.js';
 
 (function initPreviewShim() {
   const isRealExtension =
@@ -24,9 +25,9 @@ import { normalizeSaveResult } from '../utils/parser.js';
       id: 'demo_zalo_1',
       groupName: '[23] LONGHOUSEE',
       senderName: 'Admin Săn Sale',
-      text: '⏰ 12:00:05: Back Mã SHOPEE50K giảm 50K đơn từ 250K toàn sàn. Lưu nhanh tại https://s.shopee.vn/70JKmob0V7',
+      text: '12:00:05: Lên mã mới SHOPEE50K giảm 50K đơn từ 250K toàn sàn và mã reset SAVEDVIP99',
       codes: ['SHOPEE50K', 'SAVEDVIP99'],
-      links: ['https://s.shopee.vn/70JKmob0V7'],
+      links: [],
       results: [
         { code: 'SHOPEE50K', success: true, alreadySaved: false, status: 'success', message: 'Lưu thành công vào ví!' },
         { code: 'SAVEDVIP99', success: true, alreadySaved: true, status: 'already_saved', message: 'Mã voucher đã có sẵn trong ví của bạn!' }
@@ -38,7 +39,7 @@ import { normalizeSaveResult } from '../utils/parser.js';
       id: 'demo_zalo_2',
       groupName: '[23] LONGHOUSEE',
       senderName: 'Bot Báo Mã',
-      text: 'Back mã HETLUOT99 giảm 100K/500K ShopeeVIP — số lượng có hạn!',
+      text: 'Reset khung giờ mới mã HETLUOT99 giảm 100K/500K ShopeeVIP',
       codes: ['HETLUOT99'],
       links: [],
       results: [
@@ -103,6 +104,45 @@ import { normalizeSaveResult } from '../utils/parser.js';
   }
 
   let activeBatchCancelled = false;
+  let previewQueueDelayMs = Number(readStorageKey('zaloQueueDelayMs')) || 6000;
+  const previewZaloQueue = createVoucherQueue({
+    initialSeenMap: readStorageKey('zaloSeenCodes') || {},
+    getDelayMs: () => Math.min(1200, Math.max(400, Math.round(previewQueueDelayMs / 6))),
+    jitterMs: 150,
+    saveFn: async (code, meta) => {
+      await new Promise((r) => setTimeout(r, 200));
+      const res = simulateShopeeResponse(code);
+      if (meta && meta.messageId) {
+        const stream = readStorageKey('zaloStream') || [];
+        let changed = false;
+        const updated = stream.map((item) => {
+          if (item.id !== meta.messageId) return item;
+          changed = true;
+          const results = Array.isArray(item.results) ? [...item.results] : [];
+          const idx = results.findIndex((r) => r.code === code);
+          const nextRes = { code, ...res };
+          if (idx >= 0) results[idx] = nextRes;
+          else results.push(nextRes);
+          return { ...item, results };
+        });
+        if (changed) {
+          writeStorageKey('zaloStream', updated);
+          emitRuntimeMessage({ type: 'ZALO_STREAM_UPDATE', stream: updated });
+        }
+      }
+      return res;
+    },
+    onUpdate: (snapshot) => {
+      emitRuntimeMessage({
+        type: 'ZALO_QUEUE_UPDATE',
+        queue: { ...snapshot, delayMs: previewQueueDelayMs }
+      });
+    },
+    onPersistSeen: (seenObj) => {
+      writeStorageKey('zaloSeenCodes', seenObj);
+    }
+  });
+
   let bannerState = {
     isRunning: false,
     mode: 'WINDOW',
@@ -299,6 +339,75 @@ import { normalizeSaveResult } from '../utils/parser.js';
           case 'GET_BANNER_WATCH_STATUS':
             respond(bannerState);
             return;
+
+          case 'GET_ZALO_QUEUE_STATUS':
+            respond({ success: true, queue: { ...previewZaloQueue.getSnapshot(), delayMs: previewQueueDelayMs } });
+            return;
+
+          case 'ZALO_QUEUE_PAUSE':
+            previewZaloQueue.pause();
+            respond({ success: true, queue: { ...previewZaloQueue.getSnapshot(), delayMs: previewQueueDelayMs } });
+            return;
+
+          case 'ZALO_QUEUE_RESUME':
+            previewZaloQueue.resume();
+            respond({ success: true, queue: { ...previewZaloQueue.getSnapshot(), delayMs: previewQueueDelayMs } });
+            return;
+
+          case 'ZALO_QUEUE_CLEAR':
+            previewZaloQueue.clearPending();
+            respond({ success: true, queue: { ...previewZaloQueue.getSnapshot(), delayMs: previewQueueDelayMs } });
+            return;
+
+          case 'ZALO_QUEUE_RESET_MEMORY':
+            previewZaloQueue.resetSeenMemory();
+            respond({ success: true, queue: { ...previewZaloQueue.getSnapshot(), delayMs: previewQueueDelayMs } });
+            return;
+
+          case 'ZALO_QUEUE_SET_DELAY':
+            previewQueueDelayMs = Math.max(3000, Number(req.payload?.delayMs) || 6000);
+            writeStorageKey('zaloQueueDelayMs', previewQueueDelayMs);
+            respond({ success: true, queue: { ...previewZaloQueue.getSnapshot(), delayMs: previewQueueDelayMs } });
+            return;
+
+          case 'ZALO_MESSAGE_DETECTED': {
+            const p = req.payload || {};
+            const msgId = p.id || `zalo_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+            const res = previewZaloQueue.enqueueFromMessage({
+              codes: p.codes || [],
+              text: p.text || '',
+              groupName: p.groupName || '[23] LONGHOUSEE',
+              senderName: p.senderName || 'Thành viên',
+              messageId: msgId,
+              timestamp: p.timestamp || Date.now()
+            });
+            if (res.enqueued && res.enqueued.length > 0) {
+              const stream = readStorageKey('zaloStream') || [];
+              const acceptedCodes = res.enqueued.map((a) => a.code);
+              const entry = {
+                id: msgId,
+                groupName: p.groupName || '[23] LONGHOUSEE',
+                senderName: p.senderName || 'Thành viên',
+                text: p.text || '',
+                codes: acceptedCodes,
+                links: [],
+                results: acceptedCodes.map((code) => ({
+                  code,
+                  success: false,
+                  alreadySaved: false,
+                  status: 'pending',
+                  message: 'Đang xếp hàng lưu chậm...'
+                })),
+                timeStr: new Date().toLocaleTimeString('vi-VN'),
+                timestamp: p.timestamp || Date.now()
+              };
+              const updated = [entry, ...stream].slice(0, 60);
+              writeStorageKey('zaloStream', updated);
+              emitRuntimeMessage({ type: 'ZALO_STREAM_UPDATE', stream: updated, newItem: entry });
+            }
+            respond({ received: true, ...res });
+            return;
+          }
 
           case 'OPEN_DASHBOARD':
             window.location.href = '/dashboard/dashboard.html';
