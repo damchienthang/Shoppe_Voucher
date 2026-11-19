@@ -1,0 +1,60 @@
+{
+  "manifest_version": 3,
+  "name": "Shopee Voucher Auto-Saver Pro",
+  "version": "1.1.0",
+  "description": "Tự động lưu mã giảm giá Shopee hàng loạt, tự động bắt tin nhắn & link từ nhóm Zalo săn sale, hẹn giờ săn mã chuẩn từng mili-giây.",
+  "permissions": [
+    "storage",
+    "cookies",
+    "alarms",
+    "tabs",
+    "activeTab",
+    "scripting",
+    "notifications",
+    "declarativeNetRequest"
+  ],
+  "host_permissions": [
+    "*://shopee.vn/*",
+    "*://*.shopee.vn/*",
+    "https://shopee.vn/*",
+    "https://*.shopee.vn/*",
+    "*://chat.zalo.me/*",
+    "<all_urls>"
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["assets/*"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "assets/icon16.png",
+      "48": "assets/icon48.png",
+      "128": "assets/icon128.png"
+    }
+  },
+  "options_page": "dashboard/dashboard.html",
+  "icons": {
+    "16": "assets/icon16.png",
+    "48": "assets/icon48.png",
+    "128": "assets/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.shopee.vn/*"],
+      "js": ["scripts/content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["*://chat.zalo.me/*"],
+      "js": ["scripts/zalo-content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

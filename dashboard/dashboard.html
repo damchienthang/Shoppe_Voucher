@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shopee Voucher Auto-Saver - Bảng Điều Khiển</title>
+  <script>
+    try {
+      const savedTheme = localStorage.getItem('dashboardTheme');
+      if (savedTheme) {
+        document.documentElement.setAttribute('data-theme', savedTheme);
+      } else {
+        document.documentElement.setAttribute('data-theme', 'tokyonight');
+      }
+    } catch (e) {}
+  </script>
+  <link rel="stylesheet" href="dashboard.css">
+</head>
+
+<body>
+  <div class="app-layout">
+    <!-- Top Shopee Navigation Header -->
+    <header class="shopee-top-header">
+      <div class="header-inner">
+        <div class="brand-section">
+          <div class="shopee-logo-box">
+            <span class="shopee-logo-text">Shopee</span>
+          </div>
+          <div class="brand-divider"></div>
+          <span class="portal-name">Voucher Auto-Saver</span>
+        </div>
+
+        <div class="header-right-section">
+          <!-- Lamplit Theme Selector -->
+          <div class="theme-selector-box" title="Đổi theme giao diện (Lamplit Palettes)">
+            <span class="theme-icon">🎨</span>
+            <select id="theme-selector" class="theme-dropdown" aria-label="Chọn Theme Lamplit">
+              <option value="tokyonight">TokyoNight (Lamplit)</option>
+              <option value="catppuccin">Catppuccin Mocha</option>
+              <option value="wonderland">Wonderland Noir</option>
+              <option value="bigwave">Big Wave Blue</option>
+              <option value="bauhaus">Bauhaus Dark</option>
+              <option value="classic">Shopee Cam (Gốc)</option>
+            </select>
+          </div>
+
+          <!-- Server Time Box (Framed) -->
+          <div class="server-time-card">
+            <span class="time-label">Giờ Server Shopee:</span>
+            <span id="dash-server-time" class="time-value">--:--:--</span>
+            <span id="dash-server-ms" class="ms-value">.000</span>
+            <button id="btn-sync-time" class="btn-sync" title="Đồng bộ lại giờ chuẩn từ Server Shopee">Đồng bộ</button>
+          </div>
+
+          <!-- User Profile Box (Framed) -->
+          <div class="user-profile-box">
+            <div class="avatar-wrap">
+              <img id="user-avatar-img" src="assets/icon48.png" alt="Avatar" class="user-avatar">
+              <span id="user-online-dot" class="online-indicator"></span>
+            </div>
+            <div class="user-info-text">
+              <span id="user-display-name" class="user-name">Đang kiểm tra...</span>
+              <span id="user-account-id" class="user-sub">Shopee VN</span>
+            </div>
+            <a href="https://shopee.vn" target="_blank" class="btn-shopee-link"
+              title="Mở trang chủ Shopee / Đăng nhập">Shopee.vn</a>
+            <button id="btn-refresh-user" class="btn-refresh-link" title="Tải lại tài khoản">Tải lại</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Container with Sidebar and Content -->
+    <div class="app-body">
+      <!-- Sidebar Navigation (Shopee Portal Style) -->
+      <aside class="sidebar">
+        <nav class="nav-menu">
+          <button type="button" class="nav-item active" data-tab="tab-batch">
+            <span class="nav-text">Lưu Mã Hàng Loạt</span>
+          </button>
+
+          <button type="button" class="nav-item" data-tab="tab-zalo">
+            <span class="nav-text">Zalo Auto-Sniffer</span>
+            <span class="nav-live-tag">Trực tiếp</span>
+          </button>
+
+          <button type="button" class="nav-item" data-tab="tab-scheduler">
+            <span class="nav-text">Hẹn Giờ Săn 0h</span>
+          </button>
+
+          <button type="button" class="nav-item" data-tab="tab-banner-watcher">
+            <span class="nav-text">Canh Mã Back Banner</span>
+            <span class="nav-live-tag">Auto API</span>
+          </button>
+
+          <button type="button" class="nav-item" data-tab="tab-settings">
+            <span class="nav-text">Cài Đặt Hệ Thống</span>
+          </button>
+        </nav>
+      </aside>
+
+      <!-- Main Content Area -->
+      <main class="main-content">
+        <!-- Breadcrumb / Page Header -->
+        <div class="content-header">
+          <h1 id="active-tab-title">Lưu Mã Hàng Loạt</h1>
+          <p id="active-tab-desc">Dán danh sách mã voucher để tự động nhập vào ví Shopee</p>
+        </div>
+
+        <!-- TAB 1: BATCH SAVER -->
+        <section id="tab-batch" class="tab-panel active">
+          <div class="grid-2col">
+            <!-- Left Column: Input Form -->
+            <div class="panel-card">
+              <div class="card-header">
+                <h3>Danh Sách Mã Voucher</h3>
+                <div class="header-badges">
+                  <span class="badge badge-accent">Phát hiện: <strong id="batch-detected-count">0</strong> mã</span>
+                </div>
+              </div>
+
+              <div class="card-body">
+                <div class="textarea-wrapper">
+                  <textarea id="batch-input-codes"
+                    placeholder="Dán danh sách mã hoặc nội dung bài viết vào đây"></textarea>
+                </div>
+
+                <!-- Tags Preview -->
+                <div id="parsed-tags-container" class="parsed-tags-container">
+                  <span class="tag-placeholder">Các mã nhận diện sẽ hiển thị tại đây...</span>
+                </div>
+
+                <div class="controls-row">
+                  <div class="control-item">
+                    <label for="batch-delay-slider">Tốc độ gửi request:</label>
+                    <div class="slider-wrapper">
+                      <input type="range" id="batch-delay-slider" min="1000" max="5000" step="100" value="1800">
+                      <span id="batch-delay-value" class="slider-value">1800 ms</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="action-buttons-row">
+                  <button id="btn-run-batch" class="btn btn-primary btn-lg">
+                    Bắt Đầu Lưu Vào Ví
+                  </button>
+                  <button id="btn-stop-batch" class="btn btn-danger btn-lg hidden">
+                    Dừng Tiến Trình
+                  </button>
+                  <button id="btn-clear-batch" class="btn btn-secondary">
+                    Xóa Trắng
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right Column: Live Progress & Execution Stats -->
+            <div class="panel-card">
+              <div class="card-header">
+                <h3>Tiến Trình & Thống Kê</h3>
+                <button id="btn-export-results" class="btn-text" title="Xuất kết quả ra CSV">Xuất file CSV</button>
+              </div>
+
+              <div class="card-body">
+                <div class="stats-overview-grid">
+                  <div class="stat-box">
+                    <span class="stat-label">Tổng mã</span>
+                    <span id="stat-total" class="stat-number">0</span>
+                  </div>
+                  <div class="stat-box success">
+                    <span class="stat-label">Thành công</span>
+                    <span id="stat-success" class="stat-number">0</span>
+                  </div>
+                  <div class="stat-box failed">
+                    <span class="stat-label">Thất bại / Hết</span>
+                    <span id="stat-failed" class="stat-number">0</span>
+                  </div>
+                </div>
+
+                <div class="progress-section">
+                  <div class="progress-labels">
+                    <span id="batch-progress-label">Sẵn sàng thực hiện</span>
+                    <span id="batch-progress-percent">0%</span>
+                  </div>
+                  <div class="progress-track">
+                    <div id="batch-progress-bar" class="progress-fill"></div>
+                  </div>
+                </div>
+
+                <!-- Results Filter Bar -->
+                <div class="table-filter-bar">
+                  <div class="filter-pills">
+                    <button class="filter-pill active" data-filter="all">Tất cả</button>
+                    <button class="filter-pill" data-filter="success">Thành công</button>
+                    <button class="filter-pill" data-filter="failed">Lỗi / Hết</button>
+                  </div>
+                </div>
+
+                <!-- Real-time Table -->
+                <div class="table-container">
+                  <table class="data-table">
+                    <thead>
+                      <tr>
+                        <th width="60">STT</th>
+                        <th width="140">Mã Voucher</th>
+                        <th width="120">Trạng Thái</th>
+                        <th>Chi Tiết Phản Hồi</th>
+                        <th width="90">Thời Gian</th>
+                      </tr>
+                    </thead>
+                    <tbody id="batch-results-tbody">
+                      <tr class="empty-row">
+                        <td colspan="5">Chưa có dữ liệu tiến trình. Nhập mã và bấm "Bắt Đầu Lưu Vào Ví" để chạy.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB 2: ZALO AUTO-SNIFFER -->
+        <section id="tab-zalo" class="tab-panel">
+          <div class="zalo-layout">
+            <!-- Control & Config Card -->
+            <div class="panel-card mb-24">
+              <div class="card-header">
+                <h3>Trợ Lý Bắt Tin Nhắn & Link Voucher Zalo Web</h3>
+                <div class="header-actions">
+                  <a href="https://chat.zalo.me" target="_blank" class="btn btn-secondary btn-sm">
+                    Mở Zalo Web (chat.zalo.me)
+                  </a>
+                </div>
+              </div>
+
+              <div class="card-body">
+                <div class="zalo-toggles-grid">
+                  <div class="z-toggle-box">
+                    <div class="z-info">
+                      <strong>Bật Lắng Nghe Zalo Web</strong>
+                      <p>Tự động theo dõi tin nhắn trong các nhóm chat Zalo đang mở</p>
+                    </div>
+                    <label class="switch">
+                      <input type="checkbox" id="zalo-enable-toggle" checked>
+                      <span class="slider"></span>
+                    </label>
+                  </div>
+
+                  <div class="z-toggle-box">
+                    <div class="z-info">
+                      <strong>Tự Động Lưu Mã Ký Tự</strong>
+                      <p>Khi tin nhắn có mã giảm giá, tự động lưu ngay lập tức vào ví</p>
+                    </div>
+                    <label class="switch">
+                      <input type="checkbox" id="zalo-autoclaim-codes" checked>
+                      <span class="slider"></span>
+                    </label>
+                  </div>
+
+                  <div class="z-toggle-box">
+                    <div class="z-info">
+                      <strong>Tự Động Mở Link Săn Mã</strong>
+                      <p>Mở tab ngầm đối với link sự kiện/voucher và tự động bấm nhận</p>
+                    </div>
+                    <label class="switch">
+                      <input type="checkbox" id="zalo-autoopen-links" checked>
+                      <span class="slider"></span>
+                    </label>
+                  </div>
+
+                  <div class="z-toggle-box">
+                    <div class="z-info">
+                      <strong>Thanh Tiện Ích Trên Zalo Web</strong>
+                      <p>Hiển thị thanh trạng thái nổi ở góc màn hình Zalo (có nút × để tắt)</p>
+                    </div>
+                    <label class="switch">
+                      <input type="checkbox" id="zalo-show-widget-toggle" checked>
+                      <span class="slider"></span>
+                    </label>
+                  </div>
+
+                  <!-- Standalone Bot Node.js Daemon Box -->
+                  <div class="z-toggle-box bot-daemon-box" style="grid-column: 1 / -1;">
+                    <div class="z-info">
+                      <strong class="bot-title">Bot Node.js Chạy Ngầm Độc Lập 24/7 (Không Cần Mở Zalo)</strong>
+                      <p>Bot chạy dưới nền máy tính, tự bắt tin nhắn nhóm [23] LONGHOUSEE và tự lưu vào ví Shopee.</p>
+                      <div style="display: flex; align-items: center; gap: 8px; margin-top: 6px;">
+                        <span id="bot-dot" class="bot-dot offline"></span>
+                        <span id="bot-status-text">Bot chưa khởi động. Hãy bấm file start_bot.bat để bật.</span>
+                      </div>
+                    </div>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                      <button id="btn-toggle-bot" class="btn btn-primary btn-sm">Bật Chạy Ngầm</button>
+                      <button id="btn-sync-bot-cookies" class="btn btn-secondary btn-sm"
+                        title="Gửi Cookie ví Shopee sang Bot">Đồng Bộ Ví</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="form-group" style="max-width: 520px; margin-top: 16px;">
+                  <label for="zalo-target-group-input">Nhóm Zalo mục tiêu:</label>
+                  <div style="display: flex; gap: 8px;">
+                    <input type="text" id="zalo-target-group-input" class="input-datetime" value="[23] LONGHOUSEE"
+                      placeholder="Tên nhóm Zalo">
+                    <button id="btn-save-zalo-group" class="btn btn-primary btn-sm" style="white-space: nowrap;">Lưu
+                      nhóm</button>
+                  </div>
+                  <small class="help-text">Mặc định: <strong>[23] LONGHOUSEE</strong>. Tiện ích sẽ tự động bỏ qua mọi
+                    nhóm chat và tin nhắn cá nhân khác.</small>
+                </div>
+
+                <div class="zalo-status-banner">
+                  <span class="live-dot"></span>
+                  <span>Trạng thái: <strong>Đang lắng nghe trực tiếp</strong>. Đang theo dõi duy nhất nhóm <strong
+                      id="zalo-active-group-label">[23] LONGHOUSEE</strong> trên <code>chat.zalo.me</code>.</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Real-time Message Feed -->
+            <div class="panel-card">
+              <div class="card-header">
+                <h3>Luồng Tin Nhắn Săn Voucher Trực Tiếp (Live Feed)</h3>
+                <button id="btn-clear-zalo-feed" class="btn-text text-danger">Xóa luồng tin</button>
+              </div>
+
+              <div class="card-body">
+                <div id="zalo-stream-container" class="zalo-stream-list">
+                  <div class="empty-feed">
+                    <h4>Đang chờ tin nhắn mới từ nhóm Zalo mục tiêu...</h4>
+                    <p>Mở <a href="https://chat.zalo.me" target="_blank" style="color: #EE4D2D;">chat.zalo.me</a> trên
+                      trình duyệt. Mọi tin nhắn chứa mã hoặc link Shopee sẽ xuất hiện ngay tại đây!</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB 3: SCHEDULER (HẸN GIỜ 0H) -->
+        <section id="tab-scheduler" class="tab-panel">
+          <div class="scheduler-grid">
+            <div class="panel-card">
+              <div class="card-header">
+                <h3>Cấu Hình Hẹn Giờ Săn Mã Chớp Nhoáng</h3>
+              </div>
+
+              <div class="card-body">
+                <div class="form-group">
+                  <label>1. Chọn khung giờ vàng sự kiện Shopee:</label>
+                  <div class="preset-times-grid">
+                    <button class="time-preset-btn" data-hour="0" data-min="0">00:00 (Nửa đêm)</button>
+                    <button class="time-preset-btn" data-hour="9" data-min="0">09:00 (Sáng)</button>
+                    <button class="time-preset-btn" data-hour="12" data-min="0">12:00 (Trưa)</button>
+                    <button class="time-preset-btn" data-hour="15" data-min="0">15:00 (Chiều)</button>
+                    <button class="time-preset-btn" data-hour="18" data-min="0">18:00 (Tối)</button>
+                    <button class="time-preset-btn" data-hour="21" data-min="0">21:00 (Giờ Vàng)</button>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label for="custom-schedule-time">Hoặc chọn thời điểm tùy chỉnh chính xác:</label>
+                  <input type="datetime-local" id="custom-schedule-time" class="input-datetime" step="1">
+                </div>
+
+                <div class="form-group">
+                  <label for="schedule-lead-time">Độ trễ kích hoạt sớm:</label>
+                  <div class="slider-wrapper">
+                    <input type="range" id="schedule-lead-time" min="0" max="300" step="10" value="50">
+                    <span id="lead-time-display" class="slider-value">Sớm 50 ms</span>
+                  </div>
+                  <small class="help-text">Khuyên dùng: 30ms - 80ms tùy vào độ trễ mạng Internet của bạn.</small>
+                </div>
+
+                <div class="form-group">
+                  <label for="scheduler-codes">Danh sách mã cần săn khi đến giờ G:</label>
+                  <textarea id="scheduler-codes"
+                    placeholder="Nhập danh sách mã cần săn"></textarea>
+                </div>
+
+                <div class="action-buttons-row">
+                  <button id="btn-activate-schedule" class="btn btn-primary btn-lg">
+                    Kích Hoạt Hẹn Giờ Săn Mã
+                  </button>
+                  <button id="btn-cancel-schedule" class="btn btn-danger btn-lg hidden">
+                    Hủy Lịch Hẹn
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Countdown Card -->
+            <div class="panel-card countdown-card">
+              <div class="card-header">
+                <h3>Đồng Hồ Đếm Ngược Giờ G</h3>
+              </div>
+
+              <div class="card-body center-content">
+                <div class="countdown-target-badge">
+                  Mục tiêu: <strong id="countdown-target-text">Chưa đặt lịch</strong>
+                </div>
+
+                <div class="countdown-digits">
+                  <div class="digit-box">
+                    <span id="cd-hours" class="digit">00</span>
+                    <span class="label">Giờ</span>
+                  </div>
+                  <span class="colon">:</span>
+                  <div class="digit-box">
+                    <span id="cd-mins" class="digit">00</span>
+                    <span class="label">Phút</span>
+                  </div>
+                  <span class="colon">:</span>
+                  <div class="digit-box">
+                    <span id="cd-secs" class="digit">00</span>
+                    <span class="label">Giây</span>
+                  </div>
+                  <span class="colon">:</span>
+                  <div class="digit-box ms-box">
+                    <span id="cd-ms" class="digit">000</span>
+                    <span class="label">Mili-giây</span>
+                  </div>
+                </div>
+
+                <div id="countdown-status-box" class="schedule-status-box waiting">
+                  <div class="indicator-pulse"></div>
+                  <span id="schedule-status-text">Đang chờ bạn cấu hình lịch hẹn...</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB: BANNER REALTIME WATCHER (CANH MÃ BACK NGẪU NHIÊN) -->
+        <section id="tab-banner-watcher" class="tab-panel">
+          <div class="scheduler-layout">
+            <!-- Config Card -->
+            <div class="panel-card config-card">
+              <div class="card-header">
+                <h3>Trợ Lý Canh Mã Back Ngẫu Nhiên & Dải Giờ Vàng</h3>
+                <span class="badge badge-success">API Shopee Realtime</span>
+              </div>
+
+              <div class="card-body">
+                <div class="banner-intro-box mb-16">
+                  <strong>Cơ chế bắt mã back ngẫu nhiên:</strong> Tự động gọi API kiểm tra quota banner mà không cần
+                  tải lại trang. Ngay khi có lượt hủy đơn hoặc Shopee nhả mã (từ phút thứ 5 đến phút thứ 30), hệ thống
+                  sẽ lập tức tự động lưu vào ví Shopee của bạn!
+                </div>
+
+                <!-- 1. Link Banner -->
+                <div class="form-group banner-url-panel">
+                  <label for="bw-input-url">Link Banner hoặc Trang Sự Kiện Shopee:</label>
+                  <div class="banner-url-row">
+                    <input type="text" id="bw-input-url" class="form-control" value="https://shopee.vn/m/goi-ShopeeVIP"
+                      placeholder="Nhập link sự kiện Shopee">
+                    <button id="bw-btn-check-banner" class="btn btn-secondary">Kiểm Tra</button>
+                  </div>
+                  <small class="help-text">Mặc định là gói Hội Viên ShopeeVIP. Bạn có thể đổi sang bất kỳ link banner sự
+                    kiện nào của Shopee.</small>
+                </div>
+
+                <!-- 2. Mode Selector -->
+                <div class="form-group">
+                  <label>2. Chọn Chế Độ Canh Mã:</label>
+                  <div class="bw-mode-selector">
+                    <label class="bw-mode-card active" id="label-mode-window">
+                      <input type="radio" name="bw-mode" value="WINDOW" checked style="margin-right: 6px;">
+                      <strong>Dải Giờ Vàng (Smart Window)</strong>
+                      <p class="mode-desc">Canh liên tục trong 15-30 phút sau giờ sale (lúc hủy đơn & quét đơn ảo nhiều nhất).</p>
+                    </label>
+
+                    <label class="bw-mode-card" id="label-mode-continuous">
+                      <input type="radio" name="bw-mode" value="CONTINUOUS" style="margin-right: 6px;">
+                      <strong>Canh Ngẫu Nhiên 24/7</strong>
+                      <p class="mode-desc">Chạy ngầm liên tục cả ngày mỗi 3-5 giây. Có mã back là hốt ngay tức thì.</p>
+                    </label>
+                  </div>
+                </div>
+
+                <!-- 3. Dynamic options for WINDOW mode -->
+                <div id="bw-window-options" class="form-group bw-window-box">
+                  <label>Cấu hình Dải Giờ Vàng:</label>
+                  <div style="display: flex; gap: 12px; align-items: center; margin-top: 8px; flex-wrap: wrap;">
+                    <div>
+                      <span class="sub-label">Chọn khung giờ:</span>
+                      <select id="bw-window-hour" class="form-control" style="width: 140px; margin-top: 4px;">
+                        <option value="NEXT_SALE">Giờ sale gần nhất</option>
+                        <option value="00:00:00">00:00 Đêm</option>
+                        <option value="09:00:00">09:00 Sáng</option>
+                        <option value="12:00:00">12:00 Trưa</option>
+                        <option value="15:00:00">15:00 Chiều</option>
+                        <option value="18:00:00">18:00 Tối</option>
+                        <option value="21:00:00">21:00 Tối</option>
+                        <option value="CUSTOM">Tự chọn giờ...</option>
+                      </select>
+                    </div>
+
+                    <div id="bw-custom-time-wrap" class="hidden">
+                      <span class="sub-label">Giờ G cụ thể:</span>
+                      <input type="time" id="bw-custom-time" class="form-control" step="1"
+                        style="width: 140px; margin-top: 4px;">
+                    </div>
+
+                    <div>
+                      <span class="sub-label">Duy trì canh sau giờ G:</span>
+                      <select id="bw-window-duration" class="form-control" style="width: 150px; margin-top: 4px;">
+                        <option value="15">15 phút (Chuẩn)</option>
+                        <option value="30" selected>30 phút (Khuyên dùng)</option>
+                        <option value="45">45 phút (Săn triệt để)</option>
+                        <option value="60">60 phút</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 4. Polling Interval -->
+                <div class="form-group bw-polling-group">
+                  <div class="bw-polling-label">
+                    <label for="bw-poll-interval">Tốc độ quét API:</label>
+                    <span>Điều chỉnh nhịp gọi dữ liệu realtime</span>
+                  </div>
+                  <div class="bw-polling-control">
+                    <select id="bw-poll-interval" class="form-control">
+                      <option value="2000">2.0 giây (Cực nhanh - Chớp cơ hội)</option>
+                      <option value="3000" selected>3.0 giây (Khuyên dùng - Cân bằng)</option>
+                      <option value="5000">5.0 giây (An toàn, êm ái)</option>
+                    </select>
+                    <span class="bw-polling-note">Khoảng nghỉ giữa mỗi lần gọi API</span>
+                  </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="action-buttons-row mt-20">
+                  <button id="btn-start-banner-watch" class="btn btn-primary btn-lg"
+                    style="box-shadow: 0 4px 14px rgba(238, 77, 45, 0.35);">
+                    Bắt Đầu Canh Mã Back
+                  </button>
+                  <button id="btn-stop-banner-watch" class="btn btn-danger btn-lg hidden">
+                    Dừng Canh Mã
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Live Monitor & Logs Card -->
+            <div class="panel-card countdown-card">
+              <div class="card-header">
+                <h3>Bảng Theo Dõi Thời Gian Thực</h3>
+                <span id="bw-live-badge" class="badge badge-secondary">Đang Chờ</span>
+              </div>
+
+              <div class="card-body">
+                <!-- Stats Row -->
+                <div class="stats-overview mb-16" style="grid-template-columns: repeat(3, 1fr);">
+                  <div class="stat-box">
+                    <span class="stat-label">Nguồn API Đã Nạp</span>
+                    <span id="bw-stat-total" class="stat-number">0</span>
+                  </div>
+                  <div class="stat-box">
+                    <span class="stat-label">Số Lần Quét API</span>
+                    <span id="bw-stat-checks" class="stat-number">0</span>
+                  </div>
+                  <div class="stat-box success">
+                    <span class="stat-label">Đã Săn Được</span>
+                    <span id="bw-stat-saved" class="stat-number" style="color: #10B981;">0</span>
+                  </div>
+                </div>
+
+                <!-- Status indicator -->
+                <div id="bw-status-box" class="schedule-status-box waiting mb-16" style="padding: 10px 14px;">
+                  <div class="indicator-pulse"></div>
+                  <span id="bw-status-text">Đang chờ bạn bấm "Bắt Đầu Canh Mã Back"...</span>
+                </div>
+
+                <!-- Terminal Logs -->
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                  <span class="sub-label" style="font-weight: 600; font-size: 13px;">Nhật Ký Quét API Trực Tiếp:</span>
+                  <button id="bw-btn-clear-logs" class="btn-text" style="font-size: 11px;">Xóa log</button>
+                </div>
+                <div id="bw-logs-container" class="bw-logs-container">
+                  <div class="log-init-msg">[Hệ thống] Sẵn sàng canh mã back ngẫu nhiên trên banner Shopee.</div>
+                </div>
+
+                <div class="network-card" aria-live="polite">
+                  <div class="network-card-header">
+                    <div>
+                      <h4>Chất lượng Wi-Fi</h4>
+                      <p>Đo độ trễ kết nối tới Shopee</p>
+                    </div>
+                    <div class="network-score-wrap">
+                      <strong id="wifi-ping-value">--</strong>
+                      <span>ms</span>
+                    </div>
+                  </div>
+                  <div class="network-chart-wrap">
+                    <canvas id="wifi-speed-chart" height="86" aria-label="Biểu đồ độ trễ Wi-Fi"></canvas>
+                  </div>
+                  <div class="network-meta">
+                    <span id="wifi-quality-label">Đang khởi tạo phép đo...</span>
+                    <span id="wifi-sample-count">0 mẫu</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB 6: SETTINGS (CÀI ĐẶT) -->
+        <section id="tab-settings" class="tab-panel">
+          <div class="panel-card max-w-700">
+            <div class="card-header">
+              <h3>Cài Đặt Hệ Thống</h3>
+            </div>
+
+            <div class="card-body">
+              <div class="settings-group">
+                <div class="setting-item">
+                  <div class="setting-info">
+                    <label>Bảng Màu & Giao Diện (Lamplit Themes)</label>
+                    <p>Chọn phong cách màu sắc lấy cảm hứng từ repo Lamplit (TokyoNight, Catppuccin Mocha, Wonderland Noir, Big Wave Blue, Bauhaus Dark hoặc Shopee gốc).</p>
+                  </div>
+                  <div class="setting-control">
+                    <select id="setting-theme" class="select-box">
+                      <option value="tokyonight">TokyoNight (Lamplit)</option>
+                      <option value="catppuccin">Catppuccin Mocha</option>
+                      <option value="wonderland">Wonderland Noir</option>
+                      <option value="bigwave">Big Wave Blue</option>
+                      <option value="bauhaus">Bauhaus Dark</option>
+                      <option value="classic">Shopee Cam (Gốc)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="setting-item">
+                  <div class="setting-info">
+                    <label>Độ trễ an toàn mặc định (Request Delay)</label>
+                    <p>Khoảng thời gian nghỉ giữa các lần gửi mã để tránh bị hệ thống Shopee nhận diện spam</p>
+                  </div>
+                  <div class="setting-control">
+                    <select id="setting-default-delay" class="select-box">
+                      <option value="1200">Nhanh (1200ms - 1.2s)</option>
+                      <option value="1800" selected>Khuyên dùng (1800ms - 1.8s) - Ổn định & Chống quét</option>
+                      <option value="2500">An toàn cao (2500ms - 2.5s) - Mô phỏng người thật</option>
+                      <option value="3500">Siêu an toàn (3500ms - 3.5s) - Chống khóa tài khoản</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="setting-item">
+                  <div class="setting-info">
+                    <label>Âm thanh thông báo khi lưu thành công</label>
+                    <p>Phát tiếng chuông chúc mừng khi bắt được voucher có giá trị</p>
+                  </div>
+                  <div class="setting-control">
+                    <label class="switch">
+                      <input type="checkbox" id="setting-sound" checked>
+                      <span class="slider"></span>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="setting-item">
+                  <div class="setting-info">
+                    <label>Hiển thị nút trợ lý nổi trên Shopee.vn</label>
+                    <p>Bật nút trợ lý nổi góc màn hình để tự cuộn & lưu voucher trực tiếp trên các trang sự kiện</p>
+                  </div>
+                  <div class="setting-control">
+                    <label class="switch">
+                      <input type="checkbox" id="setting-floating-widget" checked>
+                      <span class="slider"></span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div class="action-buttons-row mt-20">
+                <button type="button" id="btn-save-settings" class="btn btn-primary">
+                  Lưu Cài Đặt
+                </button>
+                <span id="settings-save-msg" class="text-success hidden">Đã lưu cài đặt thành công!</span>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script type="module" src="dashboard.js"></script>
+</body>
+
+</html>

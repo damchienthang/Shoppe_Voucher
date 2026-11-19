@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shopee Voucher Auto-Saver</title>
+  <script>
+    try {
+      const savedTheme = localStorage.getItem('dashboardTheme');
+      if (savedTheme) {
+        document.documentElement.setAttribute('data-theme', savedTheme);
+      } else {
+        document.documentElement.setAttribute('data-theme', 'tokyonight');
+      }
+    } catch (e) {}
+  </script>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <!-- Header (Shopee Orange Header) -->
+    <header class="header">
+      <div class="brand">
+        <span class="logo-text">Shopee</span>
+        <span class="portal-badge">Voucher</span>
+      </div>
+      <div class="header-actions">
+        <button id="btn-open-dashboard" class="btn-dashboard-link" title="Mở Bảng Điều Khiển">
+          Bảng điều khiển
+        </button>
+      </div>
+    </header>
+
+    <!-- User & Server Status Bar -->
+    <div class="status-bar">
+      <div id="user-status" class="user-pill offline">
+        <div class="status-dot"></div>
+        <span id="user-name">Đang kiểm tra...</span>
+      </div>
+      <div id="server-clock-pill" class="clock-pill" title="Giờ chuẩn Server Shopee">
+        <span id="server-time">--:--:--</span>
+      </div>
+    </div>
+
+    <!-- Quick Tabs -->
+    <div class="tab-nav">
+      <button class="tab-btn active" data-tab="tab-quick">Lưu Nhanh</button>
+      <button class="tab-btn" data-tab="tab-page">Trang Hiện Tại</button>
+    </div>
+
+    <!-- Tab 1: Quick Voucher Code Save -->
+    <div id="tab-quick" class="tab-content active">
+      <div class="input-group">
+        <label for="quick-codes">Nhập hoặc dán mã voucher:</label>
+        <textarea id="quick-codes" placeholder="Nhập hoặc dán mã voucher vào đây"></textarea>
+      </div>
+
+      <div class="code-preview-info">
+        <span>Đã phát hiện: <strong id="detected-code-count">0</strong> mã</span>
+        <button id="btn-clear-input" class="btn-text-link">Xóa</button>
+      </div>
+
+      <div class="button-row">
+        <button id="btn-start-batch" class="btn btn-primary">
+          Lưu Vào Ví Ngay
+        </button>
+      </div>
+
+      <!-- Live Progress & Result List -->
+      <div id="quick-progress-box" class="progress-box hidden">
+        <div class="progress-header">
+          <span id="progress-status-text">Đang xử lý...</span>
+          <span id="progress-percent">0/0</span>
+        </div>
+        <div class="progress-bar-bg">
+          <div id="progress-bar-fill" class="progress-bar-fill"></div>
+        </div>
+      </div>
+
+      <div id="quick-results-container" class="results-container hidden">
+        <div class="results-title">Kết quả lưu mã:</div>
+        <div id="quick-results-list" class="results-list"></div>
+      </div>
+    </div>
+
+    <!-- Tab 2: Collect from Active Page -->
+    <div id="tab-page" class="tab-content">
+      <div class="page-action-card">
+        <div class="card-info">
+          <div class="card-title">Quét trang Shopee đang mở</div>
+          <div class="card-desc">Tự động bấm lưu tất cả voucher trên trang Mã Giảm Giá hoặc Sự Kiện Sale.</div>
+        </div>
+      </div>
+
+      <div class="page-stats">
+        <span>Voucher tìm thấy trên trang:</span>
+        <strong id="page-voucher-count" class="highlight-count">0</strong>
+      </div>
+
+      <div class="page-buttons">
+        <button id="btn-page-collect" class="btn btn-primary">
+          Lưu Toàn Bộ Trên Trang
+        </button>
+        <button id="btn-page-scroll" class="btn btn-secondary">
+          Tự Cuộn & Quét Hết Trang
+        </button>
+      </div>
+
+      <div id="page-action-msg" class="action-alert hidden"></div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <button id="btn-view-wallet" class="footer-link">
+        <span>Xem Ví Voucher</span>
+      </button>
+      <button id="btn-open-scheduler" class="footer-link">
+        <span>Hẹn Giờ Săn 0h</span>
+      </button>
+    </footer>
+  </div>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "targetGroup": "[23] LONGHOUSEE",
+  "minCodeLength": 5,
+  "rejectSpecialChars": true,
+  "autoClaimCodes": true,
+  "autoClaimLinks": true,
+  "shopeeCookies": {
+    "SPC_EC": "",
+    "SPC_U": "",
+    "csrftoken": ""
+  },
+  "localServerPort": 23232,
+  "isRunning": true,
+  "headless": true,
+  "chromeProfileMode": "system",
+  "chromeProfileDirectory": "Default"
+}

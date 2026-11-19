@@ -1,0 +1,5 @@
+/node_modules
+/bot_data/
+/bot_config.json
+bot/bot_data/
+bot/bot_config.json

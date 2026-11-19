@@ -1,0 +1,22 @@
+{
+  "name": "shopee-voucher-autosaver",
+  "version": "1.0.0",
+  "description": "Chrome Extension Tự Động Lưu Voucher Shopee Việt Nam",
+  "type": "module",
+  "scripts": {
+    "test": "node tests/test_suite.js",
+    "icons": "node tools/generate_icons.js",
+    "bot": "node bot/bot.js"
+  },
+  "keywords": [
+    "shopee",
+    "voucher",
+    "chrome-extension",
+    "auto-claim"
+  ],
+  "author": "Antigravity",
+  "license": "MIT",
+  "dependencies": {
+    "puppeteer-core": "^25.9.0"
+  }
+}
